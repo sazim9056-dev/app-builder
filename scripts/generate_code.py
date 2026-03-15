@@ -1,38 +1,39 @@
-from google import genai
 import os
 import subprocess
+from groq import Groq
 
 # Environment variables se lo
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 APP_PROMPT = os.environ.get("APP_PROMPT", "Create a simple hello world app")
 
-client = genai.Client(api_key=GEMINI_API_KEY)
+client = Groq(api_key=GROQ_API_KEY)
 
 
 def generate_flutter_code(prompt: str) -> str:
-    system_prompt = f"""
-You are an expert Flutter developer. Create a complete, working Flutter app.
-
-User wants: {prompt}
-
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[
+            {
+                "role": "system",
+                "content": """You are an expert Flutter developer. 
+Generate ONLY valid Dart code for a Flutter app.
 STRICT RULES:
-1. Output ONLY valid Dart code, nothing else
-2. Start EXACTLY with: import 'package:flutter/material.dart';
-3. Must have: void main() => runApp(MyApp());
-4. Use ONLY basic Flutter Material widgets - NO external packages
-5. Make it fully functional
-6. NO explanations, NO markdown, NO backticks
-7. Just pure Dart code only
-
-Write the complete main.dart file now:
-"""
-
-    response = client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=system_prompt
+- Start EXACTLY with: import 'package:flutter/material.dart';
+- Must have: void main() => runApp(MyApp());
+- Use ONLY basic Flutter Material widgets - NO external packages
+- NO explanations, NO markdown, NO backticks
+- Just pure Dart code only"""
+            },
+            {
+                "role": "user",
+                "content": f"Create a complete Flutter app: {prompt}"
+            }
+        ],
+        temperature=0.3,
+        max_tokens=4096,
     )
 
-    code = response.text.strip()
+    code = response.choices[0].message.content.strip()
 
     # Clean up markdown if present
     if "```dart" in code:
@@ -79,10 +80,10 @@ def create_flutter_project(flutter_code: str):
 
 if __name__ == "__main__":
     print(f"Prompt: {APP_PROMPT}")
-    print("Generating Flutter code with Gemini...")
+    print("Generating Flutter code with Groq AI...")
 
     flutter_code = generate_flutter_code(APP_PROMPT)
-    print("Code generated!")
+    print("Code generated successfully!")
 
     create_flutter_project(flutter_code)
     print("Done! Ready to build APK.")
