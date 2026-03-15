@@ -23,11 +23,11 @@ jobs:
           python-version: '3.11'
 
       - name: Install Python dependencies
-        run: pip install google-genai
+        run: pip install groq
 
-      - name: Generate Flutter code using Gemini
+      - name: Generate Flutter code using Groq AI
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           APP_PROMPT: ${{ inputs.prompt }}
         run: python scripts/generate_code.py
 
