@@ -15,26 +15,24 @@ def generate_flutter_code(prompt: str) -> str:
         messages=[
             {
                 "role": "system",
-                "content": """You are an expert Flutter developer. Generate ONLY valid Dart code.
+                "content": """You are a Flutter developer. Generate ONLY simple, basic Flutter code.
 
-STRICT RULES:
-1. Start EXACTLY with: import 'package:flutter/material.dart';
-2. Must have: void main() => runApp(const MyApp());
-3. Use ONLY built-in Flutter Material widgets - NO external packages
-4. NEVER use: fl_chart, charts_flutter, provider, bloc, http, dio, sqflite, firebase, google_fonts
-5. For charts: use Container + Row + Column with colored boxes only
-6. For ThemeData, use EXACTLY this pattern:
-   ThemeData(
-     colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
-     useMaterial3: true,
-   )
-7. NEVER use: accentColor, primarySwatch, ColorScheme.fromSwatch with secondary
-8. NO explanations, NO markdown, NO backticks
-9. Just pure valid Dart code only"""
+ABSOLUTE RULES - NO EXCEPTIONS:
+1. Start with: import 'package:flutter/material.dart';
+2. Use: void main() => runApp(const MyApp());
+3. ONLY use these widgets: Scaffold, AppBar, Column, Row, Container, Text, ElevatedButton, TextButton, ListView, ListTile, Card, Icon, TextField, Padding, SizedBox, Expanded, Center, SingleChildScrollView, BottomNavigationBar, FloatingActionButton, AlertDialog, showDialog, CircleAvatar, Divider, Wrap, Stack, Positioned, Navigator, MaterialPageRoute, TabBar, TabBarView, DefaultTabController, Checkbox, Switch, Radio, Slider, DropdownButton, PopupMenuButton, IconButton, CircularProgressIndicator
+4. ThemeData MUST use: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue), useMaterial3: true)
+5. NEVER use Transform widget with transform parameter
+6. NEVER use Matrix4
+7. NEVER use any external packages
+8. NEVER use fl_chart, charts, provider, http, dio, firebase
+9. For rotating: use Transform.rotate() as a WIDGET wrapping child, NOT as parameter
+10. Keep code SIMPLE - no complex animations or transforms
+11. NO markdown, NO backticks, ONLY pure Dart code"""
             },
             {
                 "role": "user",
-                "content": f"Create a complete Flutter app: {prompt}\n\nIMPORTANT: Use ONLY built-in Flutter widgets. NO external packages."
+                "content": f"Create a simple Flutter app: {prompt}\n\nKEEP IT SIMPLE. Use only basic Material widgets. No transforms, no animations, no external packages."
             }
         ],
         temperature=0.1,
@@ -55,30 +53,47 @@ STRICT RULES:
         if idx != -1:
             code = code[idx:]
 
-    # Auto fix common errors
+    # ============ AUTO FIX COMMON ERRORS ============
+
     # Fix accentColor
-    code = re.sub(r'accentColor\s*:.*?,', '', code)
-    
+    code = re.sub(r'\baccentColor\s*:.*?,?\n?', '', code)
+
     # Fix primarySwatch
     code = re.sub(
         r'primarySwatch\s*:\s*Colors\.\w+,?',
-        "colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue), useMaterial3: true,",
+        'colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue), useMaterial3: true,',
         code
     )
-    
-    # Fix ColorScheme.fromSwatch with secondary (invalid)
+
+    # Fix ColorScheme.fromSwatch
     code = re.sub(
-        r'ColorScheme\.fromSwatch\([^)]*secondary[^)]*\)',
+        r'ColorScheme\.fromSwatch\([^)]*\)',
         'ColorScheme.fromSeed(seedColor: Colors.blue)',
         code
     )
-    
-    # Fix ThemeData with just primarySwatch gone - ensure colorScheme exists
+
+    # Fix transform: Transform.rotate(...) → remove entire transform line
+    code = re.sub(r'transform\s*:\s*Transform\.[^,\n]+,?\n?', '', code)
+
+    # Fix transform: Matrix4... → remove
+    code = re.sub(r'transform\s*:\s*Matrix4[^,\n]+,?\n?', '', code)
+
+    # Remove Matrix4 imports if any
+    code = re.sub(r"import 'package:vector_math[^']*';\n?", '', code)
+
+    # Fix missing colorScheme in ThemeData
     if 'ThemeData(' in code and 'colorScheme' not in code:
         code = code.replace(
             'ThemeData(',
-            'ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue), useMaterial3: true,'
+            'ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue), useMaterial3: true, '
         )
+
+    # Remove any non-flutter package imports
+    bad_packages = ['fl_chart', 'charts_flutter', 'provider', 'bloc', 'http',
+                    'dio', 'sqflite', 'hive', 'firebase', 'google_fonts',
+                    'vector_math', 'syncfusion', 'get:', 'riverpod']
+    for pkg in bad_packages:
+        code = re.sub(rf"import 'package:{pkg}[^']*';\n?", '', code)
 
     return code
 
