@@ -1,5 +1,6 @@
 import os
 import subprocess
+import re
 from groq import Groq
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
@@ -16,42 +17,24 @@ def generate_flutter_code(prompt: str) -> str:
                 "role": "system",
                 "content": """You are an expert Flutter developer. Generate ONLY valid Dart code.
 
-STRICT RULES - FOLLOW EXACTLY:
+STRICT RULES:
 1. Start EXACTLY with: import 'package:flutter/material.dart';
 2. Must have: void main() => runApp(const MyApp());
-3. Use ONLY these built-in Flutter widgets - NO other packages:
-   - Container, Row, Column, Stack, ListView, GridView
-   - Text, Icon, Image, TextField, TextFormField
-   - ElevatedButton, TextButton, IconButton, FloatingActionButton
-   - AppBar, Scaffold, BottomNavigationBar, Drawer
-   - Card, ListTile, CircleAvatar, Divider
-   - SingleChildScrollView, PageView, TabBar, TabBarView
-   - showDialog, AlertDialog, SnackBar
-   - CircularProgressIndicator, LinearProgressIndicator
-   - Padding, Margin, SizedBox, Expanded, Flexible
-   - StatefulWidget, StatelessWidget, setState
-   - Navigator, MaterialPageRoute
-4. NEVER use these packages (they are NOT installed):
-   - fl_chart, charts_flutter, syncfusion (NO charts libraries)
-   - provider, bloc, riverpod, get (NO state management packages)
-   - http, dio (NO network packages)
-   - sqflite, hive (NO database packages)
-   - firebase (NO firebase)
-   - google_fonts (NO custom fonts)
-5. For charts/graphs: Draw using Container + Row + Column with colored boxes
-6. NEVER use accentColor (deprecated) - use colorScheme.secondary instead
-7. NO explanations, NO markdown, NO backticks
-8. Just pure valid Dart code only"""
+3. Use ONLY built-in Flutter Material widgets - NO external packages
+4. NEVER use: fl_chart, charts_flutter, provider, bloc, http, dio, sqflite, firebase, google_fonts
+5. For charts: use Container + Row + Column with colored boxes only
+6. For ThemeData, use EXACTLY this pattern:
+   ThemeData(
+     colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
+     useMaterial3: true,
+   )
+7. NEVER use: accentColor, primarySwatch, ColorScheme.fromSwatch with secondary
+8. NO explanations, NO markdown, NO backticks
+9. Just pure valid Dart code only"""
             },
             {
                 "role": "user",
-                "content": f"""Create a complete Flutter app: {prompt}
-
-IMPORTANT: 
-- Use ONLY built-in Flutter Material widgets
-- NO external packages at all
-- For any charts or graphs, use simple colored Container widgets
-- Make sure ALL Dart syntax is 100% valid"""
+                "content": f"Create a complete Flutter app: {prompt}\n\nIMPORTANT: Use ONLY built-in Flutter widgets. NO external packages."
             }
         ],
         temperature=0.1,
@@ -72,8 +55,30 @@ IMPORTANT:
         if idx != -1:
             code = code[idx:]
 
-    # Fix deprecated accentColor
-    code = code.replace("accentColor:", "// accentColor:")
+    # Auto fix common errors
+    # Fix accentColor
+    code = re.sub(r'accentColor\s*:.*?,', '', code)
+    
+    # Fix primarySwatch
+    code = re.sub(
+        r'primarySwatch\s*:\s*Colors\.\w+,?',
+        "colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue), useMaterial3: true,",
+        code
+    )
+    
+    # Fix ColorScheme.fromSwatch with secondary (invalid)
+    code = re.sub(
+        r'ColorScheme\.fromSwatch\([^)]*secondary[^)]*\)',
+        'ColorScheme.fromSeed(seedColor: Colors.blue)',
+        code
+    )
+    
+    # Fix ThemeData with just primarySwatch gone - ensure colorScheme exists
+    if 'ThemeData(' in code and 'colorScheme' not in code:
+        code = code.replace(
+            'ThemeData(',
+            'ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue), useMaterial3: true,'
+        )
 
     return code
 
