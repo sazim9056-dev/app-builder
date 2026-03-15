@@ -1,0 +1,65 @@
+name: Build Flutter APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: 'App description prompt'
+        required: true
+        type: string
+      run_id_ref:
+        description: 'Reference ID'
+        required: false
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: pip install google-generativeai
+
+      - name: Generate Flutter code using Gemini
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          APP_PROMPT: ${{ inputs.prompt }}
+        run: python scripts/generate_code.py
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.19.0'
+          channel: 'stable'
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Get Flutter dependencies
+        run: |
+          cd generated_app
+          flutter pub get
+
+      - name: Build APK
+        run: |
+          cd generated_app
+          flutter build apk --debug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-app
+          path: generated_app/build/app/outputs/flutter-apk/app-debug.apk
+          retention-days: 1
