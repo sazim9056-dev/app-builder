@@ -1,4 +1,4 @@
-import google.generativeai as genai
+from google import genai
 import os
 import subprocess
 
@@ -6,12 +6,10 @@ import subprocess
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 APP_PROMPT = os.environ.get("APP_PROMPT", "Create a simple hello world app")
 
-genai.configure(api_key=GEMINI_API_KEY)
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 
 def generate_flutter_code(prompt: str) -> str:
-    model = genai.GenerativeModel('gemini-1.5-flash')
-
     system_prompt = f"""
 You are an expert Flutter developer. Create a complete, working Flutter app.
 
@@ -29,7 +27,11 @@ STRICT RULES:
 Write the complete main.dart file now:
 """
 
-    response = model.generate_content(system_prompt)
+    response = client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=system_prompt
+    )
+
     code = response.text.strip()
 
     # Clean up markdown if present
@@ -78,7 +80,7 @@ def create_flutter_project(flutter_code: str):
 if __name__ == "__main__":
     print(f"Prompt: {APP_PROMPT}")
     print("Generating Flutter code with Gemini...")
-    
+
     flutter_code = generate_flutter_code(APP_PROMPT)
     print("Code generated!")
 
