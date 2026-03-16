@@ -8,11 +8,15 @@ on:
         required: true
         type: string
       session_id:
-        description: 'Unique session ID for this build'
+        description: 'Unique session ID'
         required: true
         type: string
       previous_code:
-        description: 'Previous code to modify (empty for new app)'
+        description: 'Previous code to modify'
+        required: false
+        type: string
+      conversation_history:
+        description: 'Full conversation history JSON'
         required: false
         type: string
 
@@ -50,6 +54,7 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           APP_PROMPT: ${{ inputs.prompt }}
           PREVIOUS_CODE: ${{ inputs.previous_code }}
+          CONVERSATION_HISTORY: ${{ inputs.conversation_history }}
           SESSION_ID: ${{ inputs.session_id }}
         run: python scripts/generate_code.py
 
@@ -60,26 +65,18 @@ jobs:
           sed -i 's/targetSdkVersion .*/targetSdkVersion 34/' build.gradle
           sed -i 's/compileSdkVersion .*/compileSdkVersion 34/' build.gradle
 
-      - name: Build Web (for preview)
+      - name: Get Flutter dependencies
         run: |
           cd generated_app
-          flutter build web --release --base-href /
+          flutter pub get
 
       - name: Build APK
         run: |
           cd generated_app
           flutter build apk --debug
 
-      - name: Save generated code
-        run: |
-          cp generated_app/lib/main.dart generated_code.dart
-
-      - name: Upload Web Preview
-        uses: actions/upload-artifact@v4
-        with:
-          name: web-preview-${{ inputs.session_id }}
-          path: generated_app/build/web/
-          retention-days: 1
+      - name: Save source code
+        run: cp generated_app/lib/main.dart generated_code.dart
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
