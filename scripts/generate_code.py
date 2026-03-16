@@ -2,11 +2,13 @@ import os
 import subprocess
 import re
 import shutil
+import json
 from groq import Groq
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 APP_PROMPT = os.environ.get("APP_PROMPT", "Create a simple hello world app")
 PREVIOUS_CODE = os.environ.get("PREVIOUS_CODE", "")
+CONVERSATION_HISTORY = os.environ.get("CONVERSATION_HISTORY", "")  # Pura history
 
 client = Groq(api_key=GROQ_API_KEY)
 
@@ -24,7 +26,7 @@ KNOWN_FIXES = {
 }
 
 
-def generate_flutter_code(prompt: str, previous_code: str = "", attempt: int = 1) -> str:
+def generate_flutter_code(prompt: str, previous_code: str = "", history: str = "", attempt: int = 1) -> str:
     print(f"  Generating code (attempt {attempt})...")
 
     extra = ""
@@ -33,34 +35,58 @@ def generate_flutter_code(prompt: str, previous_code: str = "", attempt: int = 1
     elif attempt >= 3:
         extra = "MAKE IT VERY SIMPLE: Single screen only."
 
-    # Agar previous code hai toh modify karo
+    # Agar previous code + history hai toh poora context bhejo
     if previous_code and previous_code.strip():
-        system_msg = """You are an expert Flutter developer. Modify the given Flutter code based on user requirements.
+        
+        # History parse karo
+        history_text = ""
+        if history:
+            try:
+                history_list = json.loads(history)
+                history_text = "\n\nCOMPLETE CONVERSATION HISTORY:\n"
+                for i, item in enumerate(history_list):
+                    history_text += f"Step {i+1} - {item['type'].upper()}: {item['content']}\n"
+            except:
+                history_text = f"\n\nPREVIOUS CONTEXT: {history}"
 
-RULES:
-1. Keep the existing structure, only make requested changes
-2. Return ONLY complete valid Dart code
-3. Start with: import 'package:flutter/material.dart';
-4. ONLY built-in Flutter widgets - NO external packages
-5. VALID Icons only - NEVER use Icons.google, Icons.facebook etc.
-6. NO markdown, NO backticks"""
+        system_msg = """You are an expert Flutter developer. You are modifying an existing Flutter app.
 
-        user_msg = f"""Modify this Flutter app based on user request:
+CRITICAL RULES:
+1. You have the FULL conversation history showing what was built before
+2. You must KEEP all existing features from the current code
+3. You must ONLY ADD or MODIFY what the user requested in the latest change
+4. Think of it like git - you're building ON TOP of the existing app
+5. Return ONLY complete valid Dart code
+6. Start with: import 'package:flutter/material.dart';
+7. ONLY built-in Flutter widgets - NO external packages
+8. VALID Icons only - NEVER use Icons.google, Icons.facebook etc.
+9. ALL Text in dark theme MUST have color: TextStyle(color: Colors.white)
+10. NO markdown, NO backticks"""
 
-USER REQUEST: {prompt}
+        user_msg = f"""Here is the complete history of this app:
+{history_text}
 
-CURRENT CODE:
+LATEST CHANGE REQUESTED: {prompt}
+
+CURRENT CODE (keep all existing features, only apply the latest change):
 {previous_code}
 
-Return the complete modified Dart code only."""
+{extra}
+
+IMPORTANT: 
+- Keep ALL existing screens and features
+- Only modify/add what was requested in "LATEST CHANGE REQUESTED"
+- Return the complete updated Dart code"""
+
     else:
+        # Fresh app - sirf original prompt
         system_msg = """You are an expert Flutter developer. Generate ONLY valid Dart code.
 
 RULES:
 1. Start with: import 'package:flutter/material.dart';
 2. Use: void main() => runApp(const MyApp());
 3. ONLY built-in Flutter widgets - NO external packages
-4. Dark theme template:
+4. Dark theme:
    theme: ThemeData(
      brightness: Brightness.dark,
      colorScheme: ColorScheme.fromSeed(
@@ -75,7 +101,8 @@ RULES:
    Icons.arrow_back, Icons.menu, Icons.star, Icons.favorite,
    Icons.language, Icons.phone, Icons.camera_alt, Icons.notifications,
    Icons.fitness_center, Icons.directions_run, Icons.local_fire_department,
-   Icons.water_drop, Icons.bar_chart, Icons.restaurant, Icons.shopping_cart
+   Icons.water_drop, Icons.bar_chart, Icons.restaurant, Icons.shopping_cart,
+   Icons.calculate, Icons.attach_money, Icons.percent
 6. NEVER use: Icons.google, Icons.facebook, Icons.twitter, Icons.apple
 7. ALL Text in dark theme MUST have color: TextStyle(color: Colors.white)
 8. NEVER use: accentColor, primarySwatch, fl_chart, any external package
@@ -155,21 +182,18 @@ def apply_known_fixes(code: str) -> str:
 
 
 def ai_fix_errors(code: str, errors: list) -> str:
-    print(f"  🔧 AI self-repairing {len(errors)} error(s)...")
-
-    error_text = '\n'.join(errors)
+    print(f"  Fixing {len(errors)} error(s)...")
 
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[
             {
                 "role": "system",
-                "content": """You are a Flutter debugging expert. Fix the given Dart code errors.
-Return ONLY the complete fixed Dart code. No explanations, no markdown."""
+                "content": "Fix Flutter Dart errors. Return ONLY complete fixed code. No explanations, no markdown."
             },
             {
                 "role": "user",
-                "content": f"Fix these errors:\n{error_text}\n\nCode:\n{code}\n\nReturn fixed code only."
+                "content": f"Fix errors:\n{chr(10).join(errors)}\n\nCode:\n{code}\n\nReturn fixed code only."
             }
         ],
         temperature=0.05,
@@ -207,39 +231,28 @@ def create_project(code: str, project_name: str = "generated_app"):
     with open(os.path.join(project_name, "lib", "main.dart"), 'w') as f:
         f.write(code)
 
-    subprocess.run(
-        ["flutter", "pub", "get"],
-        cwd=project_name,
-        capture_output=True, timeout=120
-    )
+    subprocess.run(["flutter", "pub", "get"], cwd=project_name,
+                   capture_output=True, timeout=120)
 
 
 def get_errors(project_name: str) -> list:
     result = subprocess.run(
         ["flutter", "analyze", "--no-congratulate"],
-        cwd=project_name,
-        capture_output=True, text=True, timeout=120
+        cwd=project_name, capture_output=True, text=True, timeout=120
     )
     output = result.stdout + result.stderr
-    errors = []
-    for line in output.split('\n'):
-        if 'error •' in line.lower():
-            errors.append(line.strip())
-    return errors
+    return [line.strip() for line in output.split('\n') if 'error •' in line.lower()]
 
 
 def build_apk(project_name: str) -> tuple:
     result = subprocess.run(
         ["flutter", "build", "apk", "--debug"],
-        cwd=project_name,
-        capture_output=True, text=True, timeout=600
+        cwd=project_name, capture_output=True, text=True, timeout=600
     )
     if result.returncode == 0:
         return True, []
-    build_errors = []
-    for line in result.stderr.split('\n'):
-        if 'error:' in line.lower() and 'lib/' in line:
-            build_errors.append(line.strip())
+    build_errors = [line.strip() for line in result.stderr.split('\n')
+                    if 'error:' in line.lower() and 'lib/' in line]
     return False, build_errors
 
 
@@ -248,8 +261,15 @@ if __name__ == "__main__":
     print("🚀 SELF-HEALING AI APP BUILDER")
     print("=" * 50)
     print(f"📝 Prompt: {APP_PROMPT[:80]}...")
+    
     if PREVIOUS_CODE:
-        print("🔄 Modifying existing app...")
+        print("🔄 Modifying existing app (with full history)...")
+    if CONVERSATION_HISTORY:
+        try:
+            h = json.loads(CONVERSATION_HISTORY)
+            print(f"📚 History: {len(h)} previous steps remembered")
+        except:
+            pass
 
     MAX_GEN = 3
     MAX_FIX = 5
@@ -258,12 +278,11 @@ if __name__ == "__main__":
     for gen in range(1, MAX_GEN + 1):
         print(f"\n━━━ GENERATION {gen}/{MAX_GEN} ━━━")
 
-        current_code = generate_flutter_code(APP_PROMPT, PREVIOUS_CODE, gen)
+        current_code = generate_flutter_code(APP_PROMPT, PREVIOUS_CODE, CONVERSATION_HISTORY, gen)
         current_code = apply_known_fixes(current_code)
 
         for fix in range(MAX_FIX):
             print(f"  🔄 Fix loop {fix + 1}/{MAX_FIX}")
-
             create_project(current_code)
             errors = get_errors("generated_app")
 
@@ -274,7 +293,7 @@ if __name__ == "__main__":
                 current_code = ai_fix_errors(current_code, errors)
                 continue
 
-            print("  🔨 Building...")
+            print("  🔨 Building APK...")
             success, build_errors = build_apk("generated_app")
 
             if success:
@@ -292,7 +311,6 @@ if __name__ == "__main__":
 
         if final_success:
             break
-
         print(f"\n⚠️ Gen {gen} exhausted, fresh generation...\n")
 
     if not final_success:
