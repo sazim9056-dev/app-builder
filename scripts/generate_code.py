@@ -14,7 +14,7 @@ def generate_flutter_code(prompt: str, attempt: int = 1) -> str:
     if attempt == 2:
         extra_instruction = "IMPORTANT: Keep it extremely simple. Only use Text, Container, Column, Row, ElevatedButton, Scaffold, AppBar, BottomNavigationBar."
     elif attempt == 3:
-        extra_instruction = "CRITICAL: Make ONE single screen app only. No navigation, no multiple screens. Just show data in a simple list."
+        extra_instruction = "CRITICAL: Make ONE single screen app only. No navigation. Just show data in a simple list."
 
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
@@ -27,21 +27,20 @@ ABSOLUTE RULES:
 1. Start with: import 'package:flutter/material.dart';
 2. Use: void main() => runApp(const MyApp());
 3. ONLY built-in Flutter widgets - NO external packages
-4. For dark theme ALWAYS use EXACTLY this - copy exactly:
-   ThemeData(
+4. For dark theme use EXACTLY this inside MaterialApp:
+   theme: ThemeData(
      brightness: Brightness.dark,
      colorScheme: ColorScheme.fromSeed(
        seedColor: Colors.green,
        brightness: Brightness.dark,
      ),
      useMaterial3: true,
-   )
-5. ALL Text widgets MUST have explicit color: Text('hello', style: TextStyle(color: Colors.white))
-6. ALL Icon widgets MUST have color parameter: Icon(Icons.home, color: Colors.white)
+   ),
+5. ALL Text widgets MUST have color: Text('hello', style: TextStyle(color: Colors.white))
+6. ALL Icon widgets MUST have color: Icon(Icons.home, color: Colors.white)
 7. NEVER use: accentColor, primarySwatch, Transform with matrix, fl_chart
 8. NO external packages at all
-9. NO markdown, NO backticks, ONLY pure Dart code
-10. Make sure all variables are initialized before use"""
+9. NO markdown, NO backticks, ONLY pure Dart code"""
             },
             {
                 "role": "user",
@@ -49,12 +48,11 @@ ABSOLUTE RULES:
 
 {extra_instruction}
 
-STRICT REQUIREMENTS:
-- Dark theme with brightness set in BOTH ThemeData AND ColorScheme
-- ALL Text must have color: Colors.white explicitly
-- ALL Icons must have color: Colors.white  
-- No external packages
-- Initialize all variables properly"""
+REQUIREMENTS:
+- Dark theme only inside MaterialApp theme parameter
+- ALL Text must have color: Colors.white
+- ALL Icons must have color: Colors.white
+- No external packages"""
             }
         ],
         temperature=0.1 if attempt == 1 else 0.05,
@@ -126,12 +124,9 @@ def auto_fix_code(code: str) -> str:
             'ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue), useMaterial3: true, '
         )
 
-    # Fix scaffold background for dark theme
-    if 'brightness: Brightness.dark' in code and 'scaffoldBackgroundColor' not in code:
-        code = code.replace(
-            'brightness: Brightness.dark,',
-            'brightness: Brightness.dark,\n      scaffoldBackgroundColor: const Color(0xFF121212),'
-        )
+    # REMOVE scaffoldBackgroundColor fix - yeh problem create kar raha tha!
+    # scaffoldBackgroundColor sirf ThemeData ke direct andar kaam karta hai
+    # AI ke code mein galat jagah add ho raha tha
 
     print("Auto-fixes applied!")
     return code
@@ -156,11 +151,9 @@ def create_flutter_project(flutter_code: str, project_name: str = "generated_app
     return project_name
 
 
-def validate_and_fix_code(project_name: str, flutter_code: str) -> tuple[bool, str]:
-    """Validate karo aur errors print karo"""
+def validate_code(project_name: str) -> tuple[bool, str]:
     print("Validating code...")
 
-    # pub get pehle
     subprocess.run(
         ["flutter", "pub", "get"],
         cwd=project_name,
@@ -174,16 +167,14 @@ def validate_and_fix_code(project_name: str, flutter_code: str) -> tuple[bool, s
     )
     output = result.stdout + result.stderr
     error_count = output.lower().count('error •')
-    
-    # Print actual errors so we can see them
+
     if error_count > 0:
         print(f"❌ Errors found: {error_count}")
-        # Print error lines
         for line in output.split('\n'):
             if 'error •' in line.lower():
                 print(f"  → {line.strip()}")
     else:
-        print("✅ No errors found!")
+        print("✅ No errors!")
 
     return error_count == 0, output
 
@@ -200,7 +191,6 @@ def build_apk(project_name: str) -> bool:
         return True
     else:
         print("❌ Build failed!")
-        # Print last errors
         for line in result.stderr.split('\n'):
             if 'error:' in line.lower() or 'Error:' in line:
                 print(f"  → {line.strip()}")
@@ -226,26 +216,17 @@ if __name__ == "__main__":
 
         create_flutter_project(flutter_code, project_name)
 
-        is_valid, analyze_output = validate_and_fix_code(project_name, flutter_code)
+        is_valid, analyze_output = validate_code(project_name)
 
-        # Agar sirf 1 error hai toh bhi build try karo
-        # Kyunki kabhi kabhi analyze mein false positive aate hain
-        error_count = analyze_output.lower().count('error •')
-
-        if error_count <= 1:
-            print(f"⚡ Trying build despite {error_count} error(s)...")
+        if is_valid:
             build_success = build_apk(project_name)
             if build_success:
                 print(f"\n✅ SUCCESS on attempt {attempt}!")
                 break
-            else:
-                print(f"⚠️ Build failed, retrying with simpler code...")
-                if os.path.exists(project_name):
-                    shutil.rmtree(project_name)
-        else:
-            print(f"⚠️ Too many errors ({error_count}), retrying...")
-            if os.path.exists(project_name):
-                shutil.rmtree(project_name)
+        
+        print(f"⚠️ Attempt {attempt} failed, retrying with simpler code...")
+        if os.path.exists(project_name):
+            shutil.rmtree(project_name)
 
     if not build_success:
         raise Exception("Could not build APK after 3 attempts")
