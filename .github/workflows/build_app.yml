@@ -43,6 +43,14 @@ jobs:
           APP_PROMPT: ${{ inputs.prompt }}
         run: python scripts/generate_code.py
 
+      - name: Fix Android SDK versions
+        run: |
+          cd generated_app/android/app
+          sed -i 's/minSdkVersion .*/minSdkVersion 21/' build.gradle
+          sed -i 's/targetSdkVersion .*/targetSdkVersion 34/' build.gradle
+          sed -i 's/compileSdkVersion .*/compileSdkVersion 34/' build.gradle
+          cat build.gradle
+
       - name: Get Flutter dependencies
         run: |
           cd generated_app
