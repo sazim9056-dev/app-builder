@@ -12,9 +12,9 @@ client = Groq(api_key=GROQ_API_KEY)
 def generate_flutter_code(prompt: str, attempt: int = 1) -> str:
     extra_instruction = ""
     if attempt == 2:
-        extra_instruction = "IMPORTANT: Keep it extremely simple. Only use Text, Container, Column, Row, ElevatedButton, Scaffold, AppBar, BottomNavigationBar."
+        extra_instruction = "IMPORTANT: Keep it extremely simple. Only use Text, Container, Column, Row, ElevatedButton, Scaffold, AppBar."
     elif attempt == 3:
-        extra_instruction = "CRITICAL: Make ONE single screen app only. No navigation. Just show data in a simple list."
+        extra_instruction = "CRITICAL: Make ONE single simple screen. No Google button, no social login buttons."
 
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
@@ -27,20 +27,27 @@ ABSOLUTE RULES:
 1. Start with: import 'package:flutter/material.dart';
 2. Use: void main() => runApp(const MyApp());
 3. ONLY built-in Flutter widgets - NO external packages
-4. For dark theme use EXACTLY this inside MaterialApp:
+4. For dark theme use EXACTLY:
    theme: ThemeData(
      brightness: Brightness.dark,
      colorScheme: ColorScheme.fromSeed(
-       seedColor: Colors.green,
+       seedColor: Colors.purple,
        brightness: Brightness.dark,
      ),
      useMaterial3: true,
    ),
-5. ALL Text widgets MUST have color: Text('hello', style: TextStyle(color: Colors.white))
-6. ALL Icon widgets MUST have color: Icon(Icons.home, color: Colors.white)
-7. NEVER use: accentColor, primarySwatch, Transform with matrix, fl_chart
-8. NO external packages at all
-9. NO markdown, NO backticks, ONLY pure Dart code"""
+5. ALL Text widgets MUST have color: TextStyle(color: Colors.white)
+6. VALID Icons ONLY - use these: Icons.email, Icons.lock, Icons.visibility, 
+   Icons.visibility_off, Icons.person, Icons.home, Icons.search, Icons.settings,
+   Icons.arrow_back, Icons.add, Icons.delete, Icons.edit, Icons.check,
+   Icons.close, Icons.menu, Icons.more_vert, Icons.star, Icons.favorite,
+   Icons.share, Icons.login, Icons.logout, Icons.account_circle,
+   Icons.phone, Icons.language, Icons.dark_mode, Icons.light_mode
+7. NEVER use: Icons.google, Icons.facebook, Icons.twitter, Icons.apple
+   (These do NOT exist in Flutter!)
+8. For Google button use: Icons.language or just a Text 'G' instead
+9. NEVER use: accentColor, primarySwatch, fl_chart, external packages
+10. NO markdown, NO backticks, ONLY pure Dart code"""
             },
             {
                 "role": "user",
@@ -48,10 +55,10 @@ ABSOLUTE RULES:
 
 {extra_instruction}
 
-REQUIREMENTS:
-- Dark theme only inside MaterialApp theme parameter
+CRITICAL:
+- NEVER use Icons.google - use Icons.language instead
+- NEVER use Icons.facebook - use Icons.thumb_up instead  
 - ALL Text must have color: Colors.white
-- ALL Icons must have color: Colors.white
 - No external packages"""
             }
         ],
@@ -124,9 +131,22 @@ def auto_fix_code(code: str) -> str:
             'ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue), useMaterial3: true, '
         )
 
-    # REMOVE scaffoldBackgroundColor fix - yeh problem create kar raha tha!
-    # scaffoldBackgroundColor sirf ThemeData ke direct andar kaam karta hai
-    # AI ke code mein galat jagah add ho raha tha
+    # Fix non-existent Icons - IMPORTANT!
+    code = code.replace('Icons.google', 'Icons.language')
+    code = code.replace('Icons.facebook', 'Icons.thumb_up')
+    code = code.replace('Icons.twitter', 'Icons.tag')
+    code = code.replace('Icons.instagram', 'Icons.camera_alt')
+    code = code.replace('Icons.apple', 'Icons.phone_iphone')
+    code = code.replace('Icons.whatsapp', 'Icons.chat')
+    code = code.replace('Icons.youtube', 'Icons.play_circle')
+    code = code.replace('Icons.linkedin', 'Icons.work')
+    code = code.replace('Icons.github', 'Icons.code')
+    code = code.replace('Icons.microsoft', 'Icons.window')
+
+    # Fix const with non-constant expressions
+    # Remove const from Icon() calls that have variables
+    code = re.sub(r'const\s+Icon\(Icons\.\w+,\s*color:\s*(?!Colors)[^)]+\)', 
+                  lambda m: m.group(0).replace('const ', ''), code)
 
     print("Auto-fixes applied!")
     return code
@@ -223,8 +243,8 @@ if __name__ == "__main__":
             if build_success:
                 print(f"\n✅ SUCCESS on attempt {attempt}!")
                 break
-        
-        print(f"⚠️ Attempt {attempt} failed, retrying with simpler code...")
+
+        print(f"⚠️ Attempt {attempt} failed, retrying...")
         if os.path.exists(project_name):
             shutil.rmtree(project_name)
 
