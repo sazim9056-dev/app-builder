@@ -9,16 +9,12 @@ APP_PROMPT = os.environ.get("APP_PROMPT", "Create a simple hello world app")
 
 client = Groq(api_key=GROQ_API_KEY)
 
-# ============================================
-# LAYER 1: SMART CODE GENERATION
-# ============================================
 def generate_flutter_code(prompt: str, attempt: int = 1) -> str:
-    
     extra_instruction = ""
     if attempt == 2:
-        extra_instruction = "IMPORTANT: Keep it extremely simple. Only use Text, Container, Column, Row, ElevatedButton widgets."
+        extra_instruction = "IMPORTANT: Keep it extremely simple. Only use Text, Container, Column, Row, ElevatedButton."
     elif attempt == 3:
-        extra_instruction = "CRITICAL: Make the simplest possible app. Just one screen with basic widgets only."
+        extra_instruction = "CRITICAL: Make the simplest possible single screen app with basic widgets only."
 
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
@@ -27,28 +23,25 @@ def generate_flutter_code(prompt: str, attempt: int = 1) -> str:
                 "role": "system",
                 "content": """You are a Flutter developer. Generate ONLY valid Dart code.
 
-ABSOLUTE RULES - NO EXCEPTIONS:
-1. Start EXACTLY with: import 'package:flutter/material.dart';
-2. Must have: void main() => runApp(const MyApp());
-3. ONLY use built-in Flutter Material widgets
-4. NO external packages (fl_chart, provider, http, firebase, etc.)
-5. For dark theme ALWAYS use:
+ABSOLUTE RULES:
+1. Start with: import 'package:flutter/material.dart';
+2. Use: void main() => runApp(const MyApp());
+3. ONLY built-in Flutter widgets - NO external packages
+4. For dark theme ALWAYS use EXACTLY:
    ThemeData(
      brightness: Brightness.dark,
      colorScheme: ColorScheme.fromSeed(
-       seedColor: Colors.blue,
+       seedColor: Colors.green,
        brightness: Brightness.dark,
      ),
      useMaterial3: true,
    )
-6. For light theme use:
-   ThemeData(
-     colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-     useMaterial3: true,
-   )
-7. NEVER use: accentColor, primarySwatch, Transform with matrix
-8. NEVER use fl_chart, charts, syncfusion for graphs
-9. For graphs/charts: use Container + Row with colored boxes
+5. When using dark theme, ALL text MUST have explicit color:
+   Text('Hello', style: TextStyle(color: Colors.white))
+6. ALL Container/Card backgrounds in dark theme must use dark colors like Color(0xFF1E1E1E) or Color(0xFF2D2D2D)
+7. NEVER leave text color unset in dark theme - always specify color: Colors.white or Colors.white70
+8. NEVER use: accentColor, primarySwatch, Transform with matrix
+9. NO external packages (fl_chart, provider, http, firebase, etc.)
 10. NO markdown, NO backticks, ONLY pure Dart code"""
             },
             {
@@ -57,9 +50,11 @@ ABSOLUTE RULES - NO EXCEPTIONS:
 
 {extra_instruction}
 
-REMEMBER: 
-- Only built-in Flutter widgets
-- Dark theme: set brightness in BOTH ThemeData AND ColorScheme
+CRITICAL REMINDERS:
+- Dark theme: ALWAYS set brightness in BOTH ThemeData AND ColorScheme
+- ALL Text widgets MUST have style: TextStyle(color: Colors.white)
+- ALL Icon widgets MUST have color: Colors.white
+- Container backgrounds: use Color(0xFF1E1E1E) or Color(0xFF2D2D2D)
 - No external packages at all"""
             }
         ],
@@ -82,9 +77,6 @@ REMEMBER:
     return code
 
 
-# ============================================
-# LAYER 2: AUTO FIX ALL KNOWN ERRORS
-# ============================================
 def auto_fix_code(code: str) -> str:
     print("Applying auto-fixes...")
 
@@ -98,24 +90,24 @@ def auto_fix_code(code: str) -> str:
     for pkg in bad_packages:
         code = re.sub(rf"import 'package:{pkg}[^']*';\n?", '', code)
 
-    # Fix 2: accentColor (deprecated)
+    # Fix 2: accentColor
     code = re.sub(r'\baccentColor\s*:.*?,?\n?', '', code)
 
-    # Fix 3: primarySwatch (deprecated)
+    # Fix 3: primarySwatch
     code = re.sub(
         r'primarySwatch\s*:\s*Colors\.\w+,?',
         'colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue), useMaterial3: true,',
         code
     )
 
-    # Fix 4: ColorScheme.fromSwatch (old API)
+    # Fix 4: ColorScheme.fromSwatch
     code = re.sub(
         r'ColorScheme\.fromSwatch\([^)]*\)',
         'ColorScheme.fromSeed(seedColor: Colors.blue)',
         code
     )
 
-    # Fix 5: Brightness mismatch - MOST IMPORTANT
+    # Fix 5: Brightness mismatch
     if 'brightness: Brightness.dark' in code:
         code = re.sub(
             r'ColorScheme\.fromSeed\(\s*seedColor\s*:\s*(Colors\.\w+)\s*\)',
@@ -123,38 +115,33 @@ def auto_fix_code(code: str) -> str:
             code
         )
 
-    # Fix 6: Transform matrix errors
+    # Fix 6: Transform matrix
     code = re.sub(r'transform\s*:\s*Transform\.[^,\n]+,?\n?', '', code)
     code = re.sub(r'transform\s*:\s*Matrix4[^,\n]+,?\n?', '', code)
     code = re.sub(r"import 'package:vector_math[^']*';\n?", '', code)
 
-    # Fix 7: Missing colorScheme in ThemeData
+    # Fix 7: Missing colorScheme
     if 'ThemeData(' in code and 'colorScheme' not in code:
         code = code.replace(
             'ThemeData(',
             'ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue), useMaterial3: true, '
         )
 
-    # Fix 8: secondary color in ColorScheme (old API)
-    code = re.sub(
-        r'ColorScheme\.fromSwatch\([^)]*secondary[^)]*\)',
-        'ColorScheme.fromSeed(seedColor: Colors.blue)',
-        code
-    )
-
-    # Fix 9: Null safety issues - required parameters
-    code = re.sub(r'(?<!\bconst\s)(?<!\bnew\s)\bText\(\)', "Text('')", code)
+    # Fix 8: Scaffold background black in dark theme
+    # Add scaffold background color if missing
+    if 'brightness: Brightness.dark' in code:
+        if 'scaffoldBackgroundColor' not in code:
+            code = code.replace(
+                'brightness: Brightness.dark,',
+                'brightness: Brightness.dark,\n      scaffoldBackgroundColor: const Color(0xFF121212),'
+            )
 
     print("Auto-fixes applied!")
     return code
 
 
-# ============================================
-# LAYER 3: VALIDATE + BUILD + TEST
-# ============================================
 def create_flutter_project(flutter_code: str, project_name: str = "generated_app"):
-    print(f"Creating Flutter project: {project_name}")
-    
+    print(f"Creating Flutter project...")
     result = subprocess.run(
         ["flutter", "create", "--org", "com.aibuilder",
          "--project-name", project_name, project_name],
@@ -168,112 +155,79 @@ def create_flutter_project(flutter_code: str, project_name: str = "generated_app
     with open(main_dart_path, 'w', encoding='utf-8') as f:
         f.write(flutter_code)
 
-    print("Project created and code injected!")
+    print("Project created!")
     return project_name
 
 
 def validate_code(project_name: str) -> tuple[bool, str]:
-    """Flutter analyze se code validate karo"""
-    print("Validating code with flutter analyze...")
-    
+    print("Validating code...")
     result = subprocess.run(
         ["flutter", "analyze", "--no-congratulate"],
         cwd=project_name,
         capture_output=True, text=True, timeout=120
     )
-    
     output = result.stdout + result.stderr
-    
-    # Count errors
     error_count = output.lower().count('error •')
-    warning_count = output.lower().count('warning •')
-    
-    print(f"Analyze result: {error_count} errors, {warning_count} warnings")
-    
-    if error_count == 0:
-        print("✅ Code validation passed!")
-        return True, output
-    else:
-        print(f"❌ Code has {error_count} errors")
-        return False, output
+    print(f"Errors found: {error_count}")
+    return error_count == 0, output
 
 
 def build_apk(project_name: str) -> bool:
-    """APK build karo"""
     print("Building APK...")
-    
     result = subprocess.run(
         ["flutter", "build", "apk", "--debug"],
         cwd=project_name,
         capture_output=True, text=True, timeout=600
     )
-    
     if result.returncode == 0:
         print("✅ APK build successful!")
         return True
     else:
-        print(f"❌ APK build failed!")
-        print(result.stderr[-2000:])  # Last 2000 chars of error
+        print(f"❌ Build failed!")
+        print(result.stderr[-2000:])
         return False
 
 
-# ============================================
-# MAIN: SELF-HEALING PIPELINE
-# ============================================
 if __name__ == "__main__":
-    print(f"🚀 Starting AI App Builder")
+    print(f"🚀 AI App Builder Started")
     print(f"📝 Prompt: {APP_PROMPT}")
-    print("="*50)
 
     max_attempts = 3
     build_success = False
 
     for attempt in range(1, max_attempts + 1):
         print(f"\n🔄 Attempt {attempt}/{max_attempts}")
-        print("-"*30)
 
-        # Step 1: Generate code
-        print("🤖 Generating Flutter code...")
         flutter_code = generate_flutter_code(APP_PROMPT, attempt)
-        
-        # Step 2: Auto fix
         flutter_code = auto_fix_code(flutter_code)
 
-        # Step 3: Create project
         project_name = "generated_app"
         if os.path.exists(project_name):
             shutil.rmtree(project_name)
-        
+
         create_flutter_project(flutter_code, project_name)
 
-        # Step 4: Flutter pub get
-        print("📦 Getting dependencies...")
         subprocess.run(
             ["flutter", "pub", "get"],
             cwd=project_name,
             capture_output=True, timeout=120
         )
 
-        # Step 5: Validate
-        is_valid, analyze_output = validate_code(project_name)
-        
+        is_valid, _ = validate_code(project_name)
         if not is_valid:
-            print(f"⚠️ Attempt {attempt} validation failed, retrying...")
+            print(f"⚠️ Validation failed, retrying...")
             continue
 
-        # Step 6: Build APK
         build_success = build_apk(project_name)
-        
         if build_success:
             print(f"\n✅ SUCCESS on attempt {attempt}!")
             break
         else:
-            print(f"⚠️ Build failed on attempt {attempt}, retrying with simpler code...")
+            print(f"⚠️ Build failed, retrying with simpler code...")
             if os.path.exists(project_name):
                 shutil.rmtree(project_name)
 
-    if build_success:
-        print("\n🎉 APK ready for user!")
-    else:
-        print("\n❌ All attempts failed!")
+    if not build_success:
         raise Exception("Could not build APK after 3 attempts")
+    
+    print("\n🎉 APK ready!")
