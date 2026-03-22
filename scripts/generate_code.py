@@ -8,7 +8,7 @@ from groq import Groq
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 APP_PROMPT = os.environ.get("APP_PROMPT", "Create a simple hello world app")
 PREVIOUS_CODE = os.environ.get("PREVIOUS_CODE", "")
-CONVERSATION_HISTORY = os.environ.get("CONVERSATION_HISTORY", "")  # Pura history
+CONVERSATION_HISTORY = os.environ.get("CONVERSATION_HISTORY", "")
 
 client = Groq(api_key=GROQ_API_KEY)
 
@@ -35,10 +35,7 @@ def generate_flutter_code(prompt: str, previous_code: str = "", history: str = "
     elif attempt >= 3:
         extra = "MAKE IT VERY SIMPLE: Single screen only."
 
-    # Agar previous code + history hai toh poora context bhejo
     if previous_code and previous_code.strip():
-        
-        # History parse karo
         history_text = ""
         if history:
             try:
@@ -49,44 +46,41 @@ def generate_flutter_code(prompt: str, previous_code: str = "", history: str = "
             except:
                 history_text = f"\n\nPREVIOUS CONTEXT: {history}"
 
-        system_msg = """You are an expert Flutter developer. You are modifying an existing Flutter app.
+        system_msg = """You are an expert Flutter developer. Modify existing Flutter code.
 
 CRITICAL RULES:
-1. You have the FULL conversation history showing what was built before
-2. You must KEEP all existing features from the current code
-3. You must ONLY ADD or MODIFY what the user requested in the latest change
-4. Think of it like git - you're building ON TOP of the existing app
-5. Return ONLY complete valid Dart code
-6. Start with: import 'package:flutter/material.dart';
-7. ONLY built-in Flutter widgets - NO external packages
-8. VALID Icons only - NEVER use Icons.google, Icons.facebook etc.
-9. ALL Text in dark theme MUST have color: TextStyle(color: Colors.white)
-10. NO markdown, NO backticks"""
+1. Keep ALL existing features, only add/modify what user requests
+2. Return ONLY complete valid Dart code
+3. Start with: import 'package:flutter/material.dart';
+4. If using math functions (pow, sqrt, sin, cos, log), ALWAYS add: import 'dart:math';
+5. Use math.pow() NOT double.pow() - pow is in dart:math library
+6. ONLY built-in Flutter widgets - NO external packages
+7. NEVER use Icons.google, Icons.facebook etc.
+8. ALL Text in dark theme MUST have color: TextStyle(color: Colors.white)
+9. NO markdown, NO backticks"""
 
-        user_msg = f"""Here is the complete history of this app:
-{history_text}
+        user_msg = f"""CONVERSATION HISTORY:{history_text}
 
-LATEST CHANGE REQUESTED: {prompt}
+LATEST CHANGE: {prompt}
 
-CURRENT CODE (keep all existing features, only apply the latest change):
+CURRENT CODE (keep all features, apply latest change only):
 {previous_code}
 
 {extra}
 
-IMPORTANT: 
-- Keep ALL existing screens and features
-- Only modify/add what was requested in "LATEST CHANGE REQUESTED"
-- Return the complete updated Dart code"""
+Return complete updated Dart code only."""
 
     else:
-        # Fresh app - sirf original prompt
         system_msg = """You are an expert Flutter developer. Generate ONLY valid Dart code.
 
 RULES:
 1. Start with: import 'package:flutter/material.dart';
-2. Use: void main() => runApp(const MyApp());
-3. ONLY built-in Flutter widgets - NO external packages
-4. Dark theme:
+2. If using math functions like pow, sqrt, sin, cos, log:
+   ALWAYS add this import: import 'dart:math' as math;
+   Then use: math.pow() NOT just pow()
+3. Use: void main() => runApp(const MyApp());
+4. ONLY built-in Flutter widgets - NO external packages
+5. Dark theme:
    theme: ThemeData(
      brightness: Brightness.dark,
      colorScheme: ColorScheme.fromSeed(
@@ -95,20 +89,16 @@ RULES:
      ),
      useMaterial3: true,
    ),
-5. VALID Icons: Icons.home, Icons.search, Icons.person, Icons.settings,
-   Icons.email, Icons.lock, Icons.visibility, Icons.visibility_off,
-   Icons.add, Icons.delete, Icons.edit, Icons.check, Icons.close,
-   Icons.arrow_back, Icons.menu, Icons.star, Icons.favorite,
-   Icons.language, Icons.phone, Icons.camera_alt, Icons.notifications,
-   Icons.fitness_center, Icons.directions_run, Icons.local_fire_department,
-   Icons.water_drop, Icons.bar_chart, Icons.restaurant, Icons.shopping_cart,
-   Icons.calculate, Icons.attach_money, Icons.percent
-6. NEVER use: Icons.google, Icons.facebook, Icons.twitter, Icons.apple
-7. ALL Text in dark theme MUST have color: TextStyle(color: Colors.white)
-8. NEVER use: accentColor, primarySwatch, fl_chart, any external package
-9. NO markdown, NO backticks - ONLY pure Dart code"""
+6. VALID Icons: Icons.home, Icons.search, Icons.person, Icons.settings,
+   Icons.email, Icons.lock, Icons.add, Icons.delete, Icons.edit,
+   Icons.arrow_back, Icons.calculate, Icons.attach_money, Icons.percent,
+   Icons.bar_chart, Icons.timeline, Icons.fitness_center
+7. NEVER use: Icons.google, Icons.facebook, Icons.twitter, Icons.apple
+8. ALL Text in dark theme: TextStyle(color: Colors.white)
+9. NEVER use: accentColor, primarySwatch, fl_chart, external packages
+10. NO markdown, NO backticks - ONLY pure Dart code"""
 
-        user_msg = f"Create Flutter app: {prompt}\n\n{extra}"
+        user_msg = f"Create Flutter app: {prompt}\n\n{extra}\n\nIMPORTANT: If you need math functions like pow(), import 'dart:math' as math and use math.pow()"
 
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
@@ -136,31 +126,38 @@ RULES:
 
 
 def apply_known_fixes(code: str) -> str:
+    # Fix bad icons
     for wrong, correct in KNOWN_FIXES.items():
         code = code.replace(wrong, correct)
 
+    # Fix bad packages
     bad_packages = [
         'fl_chart', 'charts_flutter', 'provider', 'bloc', 'http',
         'dio', 'sqflite', 'hive', 'firebase', 'google_fonts',
-        'vector_math', 'syncfusion', 'get:', 'riverpod', 'intl',
-        'shared_preferences', 'path_provider', 'image_picker',
+        'vector_math', 'syncfusion', 'get:', 'riverpod',
         'flutter_svg', 'cached_network_image', 'lottie'
     ]
     for pkg in bad_packages:
         code = re.sub(rf"import 'package:{pkg}[^']*';\n?", '', code)
 
+    # Fix accentColor
     code = re.sub(r'\baccentColor\s*:.*?,?\n?', '', code)
+
+    # Fix primarySwatch
     code = re.sub(
         r'primarySwatch\s*:\s*Colors\.\w+,?',
         'colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue), useMaterial3: true,',
         code
     )
+
+    # Fix ColorScheme.fromSwatch
     code = re.sub(
         r'ColorScheme\.fromSwatch\([^)]*\)',
         'ColorScheme.fromSeed(seedColor: Colors.blue)',
         code
     )
 
+    # Fix brightness mismatch
     if 'brightness: Brightness.dark' in code:
         code = re.sub(
             r'ColorScheme\.fromSeed\(\s*seedColor\s*:\s*(Colors\.\w+)\s*\)',
@@ -168,15 +165,38 @@ def apply_known_fixes(code: str) -> str:
             code
         )
 
+    # Fix Transform matrix
     code = re.sub(r'transform\s*:\s*Transform\.[^,\n]+,?\n?', '', code)
     code = re.sub(r'transform\s*:\s*Matrix4[^,\n]+,?\n?', '', code)
     code = re.sub(r"import 'package:vector_math[^']*';\n?", '', code)
 
+    # Fix missing colorScheme
     if 'ThemeData(' in code and 'colorScheme' not in code:
         code = code.replace(
             'ThemeData(',
             'ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue), useMaterial3: true, '
         )
+
+    # ✅ KEY FIX: pow() without dart:math import
+    if 'pow(' in code and "import 'dart:math'" not in code:
+        # dart:math import add karo
+        code = "import 'dart:math' as math;\n" + code
+        # pow( ko math.pow( se replace karo
+        code = re.sub(r'(?<!math\.)pow\(', 'math.pow(', code)
+
+    # Fix pow() already imported but used without prefix
+    if "import 'dart:math'" in code:
+        # Agar math as math hai toh pow( → math.pow(
+        if "as math" in code:
+            code = re.sub(r'(?<!math\.)pow\(', 'math.pow(', code)
+        else:
+            # import 'dart:math'; hai toh pow() directly chalega
+            pass
+
+    # Fix sqrt, sin, cos etc bhi
+    if 'sqrt(' in code and "import 'dart:math'" not in code:
+        code = "import 'dart:math' as math;\n" + code
+        code = re.sub(r'(?<!math\.)sqrt\(', 'math.sqrt(', code)
 
     return code
 
@@ -184,16 +204,30 @@ def apply_known_fixes(code: str) -> str:
 def ai_fix_errors(code: str, errors: list) -> str:
     print(f"  Fixing {len(errors)} error(s)...")
 
+    # Agar pow error hai toh directly fix karo bina AI ke
+    pow_errors = [e for e in errors if "'pow' isn't defined" in e or "pow" in e.lower()]
+    if pow_errors and len(pow_errors) == len(errors):
+        print("  Direct fix: Adding dart:math import for pow()")
+        if "import 'dart:math'" not in code:
+            code = "import 'dart:math' as math;\n" + code
+        code = re.sub(r'(?<!math\.)pow\(', 'math.pow(', code)
+        return code
+
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[
             {
                 "role": "system",
-                "content": "Fix Flutter Dart errors. Return ONLY complete fixed code. No explanations, no markdown."
+                "content": """Fix Flutter Dart errors. Return ONLY complete fixed code.
+
+IMPORTANT FIXES:
+- If error is about 'pow' not defined: add "import 'dart:math' as math;" and use math.pow()
+- If error is about 'sqrt' not defined: add "import 'dart:math' as math;" and use math.sqrt()
+- No explanations, no markdown, no backticks"""
             },
             {
                 "role": "user",
-                "content": f"Fix errors:\n{chr(10).join(errors)}\n\nCode:\n{code}\n\nReturn fixed code only."
+                "content": f"Fix these errors:\n{chr(10).join(errors)}\n\nCode:\n{code}\n\nReturn fixed code only."
             }
         ],
         temperature=0.05,
@@ -261,9 +295,9 @@ if __name__ == "__main__":
     print("🚀 SELF-HEALING AI APP BUILDER")
     print("=" * 50)
     print(f"📝 Prompt: {APP_PROMPT[:80]}...")
-    
+
     if PREVIOUS_CODE:
-        print("🔄 Modifying existing app (with full history)...")
+        print("🔄 Modifying existing app...")
     if CONVERSATION_HISTORY:
         try:
             h = json.loads(CONVERSATION_HISTORY)
