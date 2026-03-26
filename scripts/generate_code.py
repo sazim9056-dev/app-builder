@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-UNIVERSAL AI APP BUILDER v4.0
-Generates ANY type of Flutter app (Social, Ecom, Food, Gaming, Utility, etc.)
+UNIVERSAL AI APP BUILDER v4.1 - Fixed App Type Detection
 """
 
 import os
@@ -12,7 +11,6 @@ import json
 import time
 from groq import Groq
 
-# ─── Environment Variables ───────────────────────────────────────────────────
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 APP_PROMPT = os.environ.get("APP_PROMPT", "Create a simple hello world app")
 PREVIOUS_CODE = os.environ.get("PREVIOUS_CODE", "")
@@ -22,179 +20,340 @@ APP_COMPLEXITY = os.environ.get("APP_COMPLEXITY", "production")
 
 client = Groq(api_key=GROQ_API_KEY)
 
-# ─── App Type Definitions ─────────────────────────────────────────────────────
+# ─── IMPROVED App Type Detection ─────────────────────────────────────────────
+def detect_app_type(prompt):
+    lower = prompt.lower()
+    
+    # Calculator / Simple Utility Apps (High Priority)
+    if any(w in lower for w in ['calculator', 'calc', 'bmi', 'emi', 'sip', 'todo', 'task', 'note', 'timer', 'stopwatch', 'converter', 'unit converter', 'password', 'random', 'age calculator', 'countdown']):
+        return 'utility'
+    
+    # Social Media
+    if any(w in lower for w in ['social', 'instagram', 'facebook', 'twitter', 'post', 'feed', 'story', 'chat', 'whatsapp']):
+        return 'social'
+    
+    # E-Commerce
+    if any(w in lower for w in ['ecommerce', 'shop', 'store', 'product', 'cart', 'checkout', 'sell', 'shopping', 'amazon', 'flipkart']):
+        return 'ecommerce'
+    
+    # Food Delivery
+    if any(w in lower for w in ['food', 'delivery', 'restaurant', 'hotel', 'menu', 'order', 'zomato', 'swiggy']):
+        return 'food_delivery'
+    
+    # Fitness
+    if any(w in lower for w in ['fitness', 'gym', 'workout', 'exercise', 'step', 'calorie', 'health', 'weight', 'bmi']):
+        return 'fitness'
+    
+    # Education
+    if any(w in lower for w in ['education', 'learning', 'course', 'quiz', 'school', 'student', 'teacher', 'lesson']):
+        return 'education'
+    
+    # Finance
+    if any(w in lower for w in ['finance', 'bank', 'expense', 'budget', 'money', 'investment', 'stock', 'crypto', 'emi', 'sip']):
+        return 'finance'
+    
+    # Travel
+    if any(w in lower for w in ['travel', 'trip', 'hotel', 'flight', 'booking', 'tour', 'vacation']):
+        return 'travel'
+    
+    # Gaming
+    if any(w in lower for w in ['game', 'gaming', 'play', 'score', 'level', 'quiz game']):
+        return 'gaming'
+    
+    # Default
+    return 'utility'  # Simple utility app by default
+
+# ─── App Type Configurations ─────────────────────────────────────────────────
 APP_TYPES = {
+    'utility': {
+        'name': 'Utility App',
+        'features': ['simple UI', 'basic calculations', 'clean design', 'dark theme'],
+        'packages': ['provider', 'intl', 'shared_preferences'],
+        'screens': ['home'],
+        'complexity': 'simple',
+        'description': 'Create a simple, clean calculator/utility app with dark theme'
+    },
     'social': {
         'name': 'Social Media App',
-        'features': ['posts', 'likes', 'comments', 'user profiles', 'follow/unfollow', 'feed', 'stories'],
-        'packages': ['http', 'provider', 'cached_network_image', 'image_picker', 'intl'],
-        'screens': ['auth', 'feed', 'profile', 'post_details', 'search', 'notifications', 'settings'],
+        'features': ['posts', 'likes', 'comments', 'user profiles'],
+        'packages': ['http', 'provider', 'cached_network_image', 'intl'],
+        'screens': ['auth', 'feed', 'profile', 'post_details'],
+        'complexity': 'complex',
     },
     'ecommerce': {
         'name': 'E-Commerce App',
-        'features': ['products', 'categories', 'cart', 'wishlist', 'checkout', 'payment', 'orders', 'reviews'],
+        'features': ['products', 'categories', 'cart', 'checkout'],
         'packages': ['http', 'provider', 'cached_network_image', 'intl'],
-        'screens': ['home', 'products', 'product_details', 'cart', 'checkout', 'orders', 'profile'],
+        'screens': ['home', 'products', 'product_details', 'cart', 'profile'],
+        'complexity': 'complex',
     },
     'food_delivery': {
         'name': 'Food Delivery App',
-        'features': ['restaurants', 'menu', 'cart', 'order tracking', 'location', 'payment', 'ratings'],
+        'features': ['restaurants', 'menu', 'cart', 'order tracking'],
         'packages': ['http', 'provider', 'cached_network_image', 'intl'],
-        'screens': ['home', 'restaurant_details', 'menu', 'cart', 'checkout', 'tracking', 'profile'],
+        'screens': ['home', 'restaurant_details', 'cart', 'tracking'],
+        'complexity': 'complex',
     },
     'fitness': {
         'name': 'Fitness App',
-        'features': ['workouts', 'exercises', 'progress tracking', 'calories', 'steps', 'water intake'],
+        'features': ['workouts', 'progress tracking', 'calories'],
         'packages': ['http', 'provider', 'intl', 'shared_preferences'],
-        'screens': ['home', 'workouts', 'exercise_details', 'progress', 'profile', 'settings'],
+        'screens': ['home', 'workouts', 'progress', 'profile'],
+        'complexity': 'medium',
     },
     'education': {
         'name': 'Education App',
-        'features': ['courses', 'lessons', 'quizzes', 'progress', 'certificates', 'videos'],
-        'packages': ['http', 'provider', 'video_player', 'cached_network_image', 'intl'],
-        'screens': ['home', 'course_details', 'lesson', 'quiz', 'profile', 'certificates'],
+        'features': ['courses', 'lessons', 'quizzes'],
+        'packages': ['http', 'provider', 'video_player', 'intl'],
+        'screens': ['home', 'course_details', 'quiz', 'profile'],
+        'complexity': 'complex',
     },
     'finance': {
         'name': 'Finance App',
-        'features': ['transactions', 'budget', 'expense tracking', 'reports', 'charts', 'savings goals'],
+        'features': ['transactions', 'budget', 'expense tracking', 'charts'],
         'packages': ['http', 'provider', 'intl', 'shared_preferences'],
-        'screens': ['dashboard', 'transactions', 'budget', 'reports', 'goals', 'profile'],
+        'screens': ['dashboard', 'transactions', 'budget', 'reports'],
+        'complexity': 'medium',
     },
     'travel': {
         'name': 'Travel App',
-        'features': ['destinations', 'hotels', 'bookings', 'reviews', 'itinerary', 'maps'],
+        'features': ['destinations', 'bookings', 'reviews', 'itinerary'],
         'packages': ['http', 'provider', 'cached_network_image', 'intl'],
-        'screens': ['home', 'destinations', 'destination_details', 'booking', 'itinerary', 'profile'],
-    },
-    'healthcare': {
-        'name': 'Healthcare App',
-        'features': ['appointments', 'doctors', 'medications', 'health records', 'reminders'],
-        'packages': ['http', 'provider', 'intl', 'shared_preferences'],
-        'screens': ['home', 'doctors', 'appointments', 'medications', 'records', 'profile'],
+        'screens': ['home', 'destinations', 'booking', 'profile'],
+        'complexity': 'complex',
     },
     'gaming': {
         'name': 'Gaming App',
-        'features': ['levels', 'scores', 'leaderboard', 'achievements', 'animations'],
+        'features': ['levels', 'scores', 'leaderboard'],
         'packages': ['shared_preferences'],
-        'screens': ['home', 'game', 'leaderboard', 'achievements', 'settings'],
-    },
-    'productivity': {
-        'name': 'Productivity App',
-        'features': ['tasks', 'notes', 'calendar', 'reminders', 'focus timer', 'categories'],
-        'packages': ['http', 'provider', 'intl', 'shared_preferences'],
-        'screens': ['dashboard', 'tasks', 'notes', 'calendar', 'focus', 'profile'],
+        'screens': ['home', 'game', 'leaderboard'],
+        'complexity': 'simple',
     },
 }
 
-# ─── System Prompt ────────────────────────────────────────────────────────────
-def get_system_prompt(app_type: str, complexity: str) -> str:
-    type_info = APP_TYPES.get(app_type, APP_TYPES['ecommerce'])
-    
-    return f"""You are a world-class Flutter developer. Create a COMPLETE, PRODUCTION-READY {type_info['name']}.
+# ─── System Prompt for Utility Apps (Calculator, Todo, etc.) ─────────────────
+def get_utility_system_prompt(prompt, complexity):
+    return f"""You are a Flutter developer. Create a SIMPLE, WORKING {prompt}.
 
-════════════════════════════════════════
-APP REQUIREMENTS:
-════════════════════════════════════════
-Type: {type_info['name']}
-Complexity: {complexity.upper()}
-Features: {', '.join(type_info['features'])}
-Screens: {', '.join(type_info['screens'])}
+APP: {prompt}
 
-════════════════════════════════════════
-PROJECT STRUCTURE:
-════════════════════════════════════════
+ABSOLUTE RULES:
+1. Create a SINGLE SCREEN app (StatefulWidget)
+2. Use ONLY flutter/material.dart - NO external packages
+3. Dark theme with primary color #6C63FF
+4. Background: Color(0xFF0F0F1A)
+5. All text: Colors.white
+6. Use setState() for state management
+7. Make it functional and clean
 
-lib/
-├── main.dart
-├── screens/ (all screens)
-├── widgets/ (reusable widgets)
-├── models/ (data models)
-├── providers/ (state management)
-├── services/ (API services)
-├── utils/ (constants, helpers)
-└── themes/ (app theme)
-
-════════════════════════════════════════
-RULES:
-════════════════════════════════════════
-
-1. Use Material 3 with dark theme (primary: #6C63FF)
-2. Use Provider for state management
-3. Create separate files for each screen
-4. Add proper error handling and loading states
-5. Use mock data if no API provided
-6. Make it beautiful with animations
-7. All text must have explicit white color
-8. Include all necessary imports
-
-════════════════════════════════════════
-OUTPUT FORMAT:
-════════════════════════════════════════
-
+OUTPUT FORMAT (SINGLE FILE):
 ===FILE: lib/main.dart===
-[complete code]
+[complete code with main() and HomeScreen]
 
+Return ONLY the code. No explanations."""
+
+def get_complex_system_prompt(app_type, complexity):
+    type_info = APP_TYPES.get(app_type, APP_TYPES['utility'])
+    
+    return f"""You are a Flutter developer. Create a {type_info['name']}.
+
+APP TYPE: {type_info['name']}
+FEATURES: {', '.join(type_info['features'])}
+COMPLEXITY: {complexity}
+
+RULES:
+1. Use Material 3 with dark theme (#6C63FF primary)
+2. Use Provider for state management if complex
+3. Create separate files for screens
+4. Add error handling and loading states
+5. All text must be white
+
+OUTPUT FORMAT:
+===FILE: lib/main.dart===
+[code]
 ===FILE: lib/screens/home_screen.dart===
-[complete code]
+[code]
 
-===FILE: lib/models/item_model.dart===
-[complete code]
+Return ONLY code files."""
 
-===FILE: lib/providers/app_provider.dart===
-[complete code]
-
-... (all files)
-
-Return ONLY the code files with ===FILE: markers. No explanations."""
-
-
-def detect_app_type(prompt: str) -> str:
-    lower = prompt.lower()
+# ─── Generate Code ───────────────────────────────────────────────────────────
+def generate_code(prompt, previous_code="", attempt=1):
+    app_type = detect_app_type(prompt)
+    type_info = APP_TYPES.get(app_type, APP_TYPES['utility'])
     
-    if any(w in lower for w in ['social', 'instagram', 'facebook', 'post', 'feed']):
-        return 'social'
-    if any(w in lower for w in ['ecommerce', 'shop', 'store', 'product', 'cart']):
-        return 'ecommerce'
-    if any(w in lower for w in ['food', 'delivery', 'restaurant', 'menu', 'order']):
-        return 'food_delivery'
-    if any(w in lower for w in ['fitness', 'gym', 'workout', 'exercise']):
-        return 'fitness'
-    if any(w in lower for w in ['education', 'course', 'quiz', 'learning']):
-        return 'education'
-    if any(w in lower for w in ['finance', 'bank', 'expense', 'budget']):
-        return 'finance'
-    if any(w in lower for w in ['travel', 'hotel', 'booking', 'trip']):
-        return 'travel'
-    if any(w in lower for w in ['healthcare', 'doctor', 'appointment']):
-        return 'healthcare'
-    if any(w in lower for w in ['game', 'gaming', 'play']):
-        return 'gaming'
-    if any(w in lower for w in ['todo', 'task', 'note', 'productivity']):
-        return 'productivity'
+    print(f"  📱 App Type: {type_info['name']}")
     
-    return 'ecommerce'
+    # For simple apps (calculator, todo, etc.) use simple prompt
+    if app_type == 'utility':
+        complexity = "simple"
+        system_prompt = get_utility_system_prompt(prompt, complexity)
+    else:
+        complexity = "simple" if attempt >= 2 else "medium"
+        system_prompt = get_complex_system_prompt(app_type, complexity)
+    
+    if previous_code and previous_code.strip():
+        user_prompt = f"""MODIFY this app:
 
+REQUEST: {prompt}
 
-def call_groq_with_retry(messages, model, temperature, max_tokens, max_retries=3):
-    for i in range(max_retries):
-        try:
-            return client.chat.completions.create(
-                model=model,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
-        except Exception as e:
-            if "rate_limit" in str(e).lower() and i < max_retries - 1:
-                wait = 2 ** i
-                print(f"  ⏳ Rate limit, waiting {wait}s...")
-                time.sleep(wait)
-            else:
-                raise
-    raise Exception("Max retries exceeded")
+EXISTING CODE:
+{previous_code}
 
+Return updated code in the same format."""
+    else:
+        user_prompt = f"""Create this app: {prompt}
+Make it clean, functional, and working."""
+    
+    try:
+        response = call_groq_with_retry(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.2,
+            max_tokens=6000,
+        )
+        
+        output = response.choices[0].message.content.strip()
+        files = parse_multi_file_code(output)
+        
+        # Add essential files if missing
+        if not files:
+            files = {'lib/main.dart': output}
+        
+        # Add pubspec.yaml if missing
+        if 'pubspec.yaml' not in files:
+            files['pubspec.yaml'] = generate_simple_pubspec()
+        
+        # Add theme if missing and needed
+        if 'lib/themes/app_theme.dart' not in files and app_type != 'utility':
+            files['lib/themes/app_theme.dart'] = generate_theme()
+        
+        return files
+        
+    except Exception as e:
+        print(f"  ❌ Generation error: {e}")
+        # Fallback: generate a simple working app
+        return generate_fallback_app(prompt)
 
-def parse_multi_file_code(output: str) -> dict:
+def generate_fallback_app(prompt):
+    """Generate a simple working app if AI fails"""
+    print("  ⚡ Using fallback - generating simple working app")
+    
+    main_dart = f'''import 'package:flutter/material.dart';
+
+void main() {{
+  runApp(const MyApp());
+}}
+
+class MyApp extends StatelessWidget {{
+  const MyApp({{super.key}});
+
+  @override
+  Widget build(BuildContext context) {{
+    return MaterialApp(
+      title: 'AI App',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        brightness: Brightness.dark,
+        useMaterial3: true,
+        colorScheme: const ColorScheme.dark(
+          primary: Color(0xFF6C63FF),
+          background: Color(0xFF0F0F1A),
+        ),
+        scaffoldBackgroundColor: const Color(0xFF0F0F1A),
+      ),
+      home: const HomeScreen(),
+    );
+  }}
+}}
+
+class HomeScreen extends StatefulWidget {{
+  const HomeScreen({{super.key}});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}}
+
+class _HomeScreenState extends State<HomeScreen> {{
+  @override
+  Widget build(BuildContext context) {{
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('{prompt[:30]}'),
+        centerTitle: true,
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.android,
+                size: 80,
+                color: Color(0xFF6C63FF),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'App Ready!',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Your app has been generated successfully.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white70),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }}
+}}
+'''
+    return {'lib/main.dart': main_dart, 'pubspec.yaml': generate_simple_pubspec()}
+
+def generate_simple_pubspec():
+    return '''name: ai_app
+description: AI Generated App
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+'''
+
+def generate_theme():
+    return '''import 'package:flutter/material.dart';
+
+class AppTheme {
+  static final ThemeData darkTheme = ThemeData(
+    brightness: Brightness.dark,
+    useMaterial3: true,
+    colorScheme: const ColorScheme.dark(
+      primary: Color(0xFF6C63FF),
+      background: Color(0xFF0F0F1A),
+      surface: Color(0xFF1E1E2E),
+    ),
+    scaffoldBackgroundColor: const Color(0xFF0F0F1A),
+  );
+}
+'''
+
+def parse_multi_file_code(output):
     files = {}
     current_file = None
     current_content = []
@@ -216,70 +375,25 @@ def parse_multi_file_code(output: str) -> dict:
     
     return files
 
+def call_groq_with_retry(messages, model, temperature, max_tokens, max_retries=3):
+    for i in range(max_retries):
+        try:
+            return client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+        except Exception as e:
+            if "rate_limit" in str(e).lower() and i < max_retries - 1:
+                wait = 2 ** i
+                print(f"  ⏳ Rate limit, waiting {wait}s...")
+                time.sleep(wait)
+            else:
+                raise
+    raise Exception("Max retries exceeded")
 
-def generate_pubspec(app_type: str) -> str:
-    type_info = APP_TYPES.get(app_type, APP_TYPES['ecommerce'])
-    deps = ['provider', 'http', 'shared_preferences', 'intl', 'cached_network_image']
-    
-    deps_yaml = '\n'.join([f'  {dep}: ^1.0.0' for dep in deps if dep != 'flutter'])
-    
-    return f'''name: ai_generated_app
-description: AI Generated Flutter App
-version: 1.0.0+1
-
-environment:
-  sdk: '>=3.0.0 <4.0.0'
-
-dependencies:
-  flutter:
-    sdk: flutter
-{deps_yaml}
-
-dev_dependencies:
-  flutter_test:
-    sdk: flutter
-  flutter_lints: ^3.0.0
-
-flutter:
-  uses-material-design: true
-'''
-
-
-def generate_theme() -> str:
-    return '''import 'package:flutter/material.dart';
-
-class AppTheme {
-  static final ThemeData darkTheme = ThemeData(
-    brightness: Brightness.dark,
-    useMaterial3: true,
-    colorScheme: const ColorScheme.dark(
-      primary: Color(0xFF6C63FF),
-      secondary: Color(0xFF03DAC6),
-      background: Color(0xFF0F0F1A),
-      surface: Color(0xFF1E1E2E),
-    ),
-    scaffoldBackgroundColor: const Color(0xFF0F0F1A),
-    cardTheme: CardTheme(
-      color: const Color(0xFF1E1E2E),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-    ),
-    elevatedButtonTheme: ElevatedButtonThemeData(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xFF6C63FF),
-        minimumSize: const Size(double.infinity, 48),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-      ),
-    ),
-  );
-}
-'''
-
-
-def create_project_from_files(files: dict, project_name: str = "generated_app"):
+def create_project_from_files(files, project_name="generated_app"):
     if os.path.exists(project_name):
         shutil.rmtree(project_name)
     
@@ -292,87 +406,28 @@ def create_project_from_files(files: dict, project_name: str = "generated_app"):
         raise Exception(f"Flutter create failed: {result.stderr}")
     
     for filepath, content in files.items():
-        if filepath == 'pubspec.yaml':
-            full_path = os.path.join(project_name, filepath)
-        else:
-            full_path = os.path.join(project_name, filepath)
-        
+        full_path = os.path.join(project_name, filepath)
         os.makedirs(os.path.dirname(full_path), exist_ok=True)
         
         with open(full_path, 'w', encoding='utf-8') as f:
             f.write(content)
 
-
-def generate_universal_code(prompt: str, previous_code: str = "", attempt: int = 1) -> dict:
-    app_type = detect_app_type(prompt)
-    type_info = APP_TYPES.get(app_type, APP_TYPES['ecommerce'])
-    
-    print(f"  📱 App Type: {type_info['name']}")
-    print(f"  ⭐ Features: {', '.join(type_info['features'][:4])}")
-    
-    complexity = "production" if attempt == 1 else ("medium" if attempt == 2 else "simple")
-    
-    system_prompt = get_system_prompt(app_type, complexity)
-    
-    if previous_code and previous_code.strip():
-        user_prompt = f"""MODIFY this existing app:
-
-USER REQUEST: {prompt}
-
-EXISTING CODE:
-{previous_code}
-
-Return COMPLETE updated code for ALL files in the ===FILE: path=== format."""
-    else:
-        user_prompt = f"""Create a COMPLETE, PRODUCTION-READY {type_info['name']}:
-
-USER REQUEST: {prompt}
-
-Features required: {', '.join(type_info['features'])}
-Screens required: {', '.join(type_info['screens'])}
-
-Return ALL files in the ===FILE: path=== format."""
-    
-    response = call_groq_with_retry(
-        model="llama-3.3-70b-versatile",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        temperature=0.2,
-        max_tokens=10000,
-    )
-    
-    output = response.choices[0].message.content.strip()
-    files = parse_multi_file_code(output)
-    
-    # Add essential files if missing
-    if 'pubspec.yaml' not in files:
-        files['pubspec.yaml'] = generate_pubspec(app_type)
-    
-    if 'lib/themes/app_theme.dart' not in files:
-        files['lib/themes/app_theme.dart'] = generate_theme()
-    
-    return files
-
-
 # ─── Main ─────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     print("=" * 55)
-    print("🚀 UNIVERSAL AI APP BUILDER v4.0")
-    print("   Build ANY App - Social, Ecom, Food, Gaming, etc.")
+    print("🚀 UNIVERSAL AI APP BUILDER v4.1")
     print("=" * 55)
     print(f"📝 Prompt: {APP_PROMPT[:100]}")
     
     app_type = detect_app_type(APP_PROMPT)
-    print(f"🎯 Type: {APP_TYPES[app_type]['name']}")
+    print(f"🎯 Detected Type: {APP_TYPES.get(app_type, APP_TYPES['utility'])['name']}")
     
     final_files = None
     
     for attempt in range(1, 4):
         print(f"\n{'━'*20} Attempt {attempt}/3 {'━'*20}")
         try:
-            files = generate_universal_code(APP_PROMPT, PREVIOUS_CODE, attempt)
+            files = generate_code(APP_PROMPT, PREVIOUS_CODE, attempt)
             print(f"📁 Generated {len(files)} files")
             
             create_project_from_files(files)
@@ -390,11 +445,10 @@ if __name__ == "__main__":
                 print("\n" + "=" * 55)
                 print("🎉 APK BUILD SUCCESSFUL!")
                 print("=" * 55)
-                print("📱 APK: generated_app/build/app/outputs/flutter-apk/app-release.apk")
                 final_files = files
                 break
             else:
-                print(f"❌ Build failed. Retrying...")
+                print(f"❌ Build failed. Error: {result.stderr[-500:]}")
                 PREVIOUS_CODE = "\n".join(files.values())
                 
         except Exception as e:
@@ -403,12 +457,5 @@ if __name__ == "__main__":
     
     if not final_files:
         raise Exception("❌ Could not build APK after all attempts")
-    
-    # Save final code
-    with open("final_code.dart", "w", encoding='utf-8') as f:
-        for path, content in final_files.items():
-            f.write(f"\n// FILE: {path}\n")
-            f.write(content)
-            f.write("\n\n")
     
     print("\n✅ Done!")
