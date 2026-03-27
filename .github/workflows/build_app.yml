@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       prompt:
-        description: 'App description (any type)'
+        description: 'App description'
         required: true
         type: string
       session_id:
@@ -19,15 +19,6 @@ on:
         description: 'Conversation history'
         required: false
         type: string
-      complexity:
-        description: 'App complexity'
-        required: false
-        type: choice
-        default: 'production'
-        options:
-          - simple
-          - medium
-          - production
 
 jobs:
   build:
@@ -58,24 +49,14 @@ jobs:
       - name: Install Python dependencies
         run: pip install groq
 
-      - name: Generate ANY App
+      - name: Generate App with AI
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           APP_PROMPT: ${{ inputs.prompt }}
           PREVIOUS_CODE: ${{ inputs.previous_code }}
           CONVERSATION_HISTORY: ${{ inputs.conversation_history }}
           SESSION_ID: ${{ inputs.session_id }}
-          APP_COMPLEXITY: ${{ inputs.complexity }}
-        run: python scripts/generate_code.py
-
-      - name: Fix Android SDK versions
-        run: |
-          if [ -f generated_app/android/app/build.gradle ]; then
-            cd generated_app/android/app
-            sed -i 's/minSdkVersion .*/minSdkVersion 21/' build.gradle
-            sed -i 's/targetSdkVersion .*/targetSdkVersion 34/' build.gradle
-            sed -i 's/compileSdkVersion .*/compileSdkVersion 34/' build.gradle
-          fi
+        run: python generate_code.py
 
       - name: Get Flutter dependencies
         run: |
