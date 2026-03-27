@@ -11,20 +11,26 @@ SESSION_ID = os.environ.get('SESSION_ID', 'default_session')
 def generate_professional_code(prompt):
     url = "https://api.groq.com/openai/v1/chat/completions"
     
-    # MASTER SYSTEM PROMPT: For Play Store Level Apps
+    # MASTER SYSTEM PROMPT: Designed for High-Level Apps
     system_prompt = """
-    You are a Senior Flutter Architect. Generate a COMPLETE, single-file 'main.dart' app.
-    
-    STRICT GUIDELINES:
-    1. NAVIGATION: If the app needs multiple screens, create multiple classes (e.g., HomeScreen, DetailScreen, SettingsScreen) in the same file. Use Navigator.push for transitions.
-    2. STATE MANAGEMENT: Use StatefulWidget and setState effectively to handle complex data.
-    3. UI/UX: Use a professional Dark Theme (Color(0xFF0F0F1A)). Use Cards, Gradients, and clean Spacing.
-    4. FEATURES: 
-       - If requested, add Charts/Graphs using CustomPainter.
-       - Add smooth animations using AnimatedContainer or Hero widgets.
-       - Use 'dart:convert' and 'shared_preferences' (mock logic) for local data simulation.
-    5. PACKAGE LIMIT: Use ONLY 'package:flutter/material.dart', 'dart:math', and 'dart:async'.
-    6. OUTPUT: Provide ONLY raw Dart code. No markdown, no backticks, no explanations.
+    You are a Senior Flutter Developer specializing in Play Store apps. 
+    Your task is to generate a SINGLE-FILE Flutter app that is sophisticated and professional.
+
+    CORE REQUIREMENTS:
+    1. MULTI-SCREEN: If the app is complex (e.g., E-commerce, Fitness Tracker), include at least 3 screens (Home, Detail, Profile) using Navigator.push.
+    2. STATE MANAGEMENT: Use advanced StatefulWidget logic to manage data across screens.
+    3. PROFESSIONAL UI:
+       - Use a premium Dark Theme (Background: 0xFF0F0F1A).
+       - Use custom Gradients and Rounded Cards (BorderRadius.circular(20)).
+       - Add clean Padding and Spacing (SizedBox).
+    4. DATA SIMULATION: Implement functions to save/load data using JSON logic (simulating local database).
+    5. VISUALS & CHARTS: 
+       - If the app needs statistics, draw custom Charts using 'CustomPainter'.
+       - Use 'dart:math' for calculations.
+    6. ANIMATIONS: Add smooth transitions using 'AnimatedContainer', 'Hero', and 'Opacity' animations.
+    7. NO EXTERNAL PACKAGES: Use ONLY 'flutter/material.dart', 'dart:math', and 'dart:convert'.
+
+    OUTPUT: Provide ONLY the raw Dart code. No text, no markdown backticks.
     """
 
     headers = {
@@ -36,9 +42,9 @@ def generate_professional_code(prompt):
         "model": "llama-3.3-70b-specdec",
         "messages": [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Build a professional multi-screen app for: {prompt}"}
+            {"role": "user", "content": f"Build a complex, multi-screen professional app for: {prompt}"}
         ],
-        "temperature": 0.6,
+        "temperature": 0.65,
         "max_tokens": 8000
     }
 
@@ -54,15 +60,15 @@ def generate_professional_code(prompt):
         return None
 
 def main():
-    print(f"Building Advanced App: {SESSION_ID}")
+    print(f"Starting Generation for: {SESSION_ID}")
     if not GROQ_API_KEY:
-        print("Error: GROQ_API_KEY not found in Environment Variables")
+        print("Error: Missing GROQ_API_KEY")
         sys.exit(1)
 
     code = generate_professional_code(APP_PROMPT)
     
     if code:
-        # Cleaning logic to ensure no markdown remains
+        # Strict Cleaning: Removing any possible AI conversational text
         if "```dart" in code:
             code = code.split("```dart")[1].split("```")[0].strip()
         elif "```" in code:
@@ -70,9 +76,8 @@ def main():
             
         with open("main.dart", "w", encoding="utf-8") as f:
             f.write(code)
-        print("Success: Professional main.dart generated.")
+        print("Success: Professional main.dart created.")
     else:
-        print("Failed to generate code.")
         sys.exit(1)
 
 if __name__ == "__main__":
