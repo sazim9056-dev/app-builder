@@ -1,342 +1,216 @@
-#!/usr/bin/env python3
-"""
-UNIVERSAL AI APP BUILDER v4.2 - WORKING VERSION
-Generates working Flutter apps that actually build
-"""
-
 import os
 import subprocess
 import re
 import shutil
 import json
-import time
 from groq import Groq
 
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-APP_PROMPT = os.environ.get("APP_PROMPT", "Create a simple hello world app")
-PREVIOUS_CODE = os.environ.get("PREVIOUS_CODE", "")
+GROQ_API_KEY        = os.environ.get("GROQ_API_KEY")
+APP_PROMPT          = os.environ.get("APP_PROMPT", "Create a simple hello world app")
+PREVIOUS_CODE       = os.environ.get("PREVIOUS_CODE", "")
 CONVERSATION_HISTORY = os.environ.get("CONVERSATION_HISTORY", "")
-SESSION_ID = os.environ.get("SESSION_ID", "")
+SESSION_ID          = os.environ.get("SESSION_ID", "")
 
 client = Groq(api_key=GROQ_API_KEY)
 
-def detect_app_type(prompt):
-    lower = prompt.lower()
-    if any(w in lower for w in ['calculator', 'calc', 'bmi', 'emi', 'sip', 'todo', 'task', 'note']):
-        return 'calculator'
-    if any(w in lower for w in ['food', 'delivery', 'restaurant']):
-        return 'food'
-    if any(w in lower for w in ['ecommerce', 'shop', 'cart']):
-        return 'ecommerce'
-    return 'simple'
-
-def generate_calculator_app():
-    """Generate a working calculator app"""
-    return '''import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-
-void main() {
-  runApp(const MyApp());
+KNOWN_ICON_FIXES = {
+    'Icons.google'    : 'Icons.language',
+    'Icons.facebook'  : 'Icons.thumb_up',
+    'Icons.twitter'   : 'Icons.tag',
+    'Icons.instagram' : 'Icons.camera_alt',
+    'Icons.apple'     : 'Icons.phone_iphone',
+    'Icons.whatsapp'  : 'Icons.chat',
+    'Icons.youtube'   : 'Icons.play_circle',
+    'Icons.github'    : 'Icons.code',
+    'Icons.microsoft' : 'Icons.window',
+    'Icons.linkedin'  : 'Icons.work',
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+BANNED_PACKAGES = [
+    'fl_chart', 'charts_flutter', 'provider', 'bloc', 'http',
+    'dio', 'sqflite', 'hive', 'firebase', 'google_fonts',
+    'vector_math', 'syncfusion', 'get:', 'riverpod', 'flutter_svg',
+    'cached_network_image', 'lottie',
+]
 
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Calculator',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        useMaterial3: true,
-        colorScheme: const ColorScheme.dark(
-          primary: Color(0xFF6C63FF),
-          background: Color(0xFF0F0F1A),
-          surface: Color(0xFF1E1E2E),
-        ),
-        scaffoldBackgroundColor: const Color(0xFF0F0F1A),
-      ),
-      home: const CalculatorScreen(),
-    );
-  }
-}
+SYSTEM_PROMPT = """You are a world-class Flutter developer. Generate BEAUTIFUL, COMPLETE, WORKING Flutter apps.
 
-class CalculatorScreen extends StatefulWidget {
-  const CalculatorScreen({super.key});
+ABSOLUTE RULES:
+1. Always start with: import 'package:flutter/material.dart';
+2. For math: import 'dart:math' as math; then use math.pow(), math.sqrt()
+3. Entry point: void main() => runApp(const MyApp());
+4. NO EXTERNAL PACKAGES — Only flutter/material.dart and dart:math
+   NEVER use: fl_chart, http, dio, provider, firebase, google_fonts, sqflite
+5. VALID ICONS ONLY: Icons.home, Icons.search, Icons.add, Icons.delete,
+   Icons.calculate, Icons.attach_money, Icons.check, Icons.star, Icons.settings
+   NEVER: Icons.google, Icons.facebook, Icons.twitter, Icons.apple
+6. DARK THEME:
+   theme: ThemeData(
+     brightness: Brightness.dark,
+     colorScheme: ColorScheme.fromSeed(
+       seedColor: const Color(0xFF6C63FF),
+       brightness: Brightness.dark,
+     ),
+     scaffoldBackgroundColor: const Color(0xFF0F0F1A),
+     useMaterial3: true,
+   ),
+7. ALL Text needs: TextStyle(color: Colors.white)
+8. NEVER use: accentColor, primarySwatch
+9. OUTPUT: ONLY pure Dart code. No markdown, no backticks.
+   Start with: import 'package:flutter/material.dart';
 
-  @override
-  State<CalculatorScreen> createState() => _CalculatorScreenState();
-}
+DESIGN:
+- Background: const Color(0xFF0F0F1A)
+- Cards: const Color(0xFF1E1E2E) with BorderRadius.circular(12)
+- Accent: const Color(0xFF6C63FF)
+- Handle all edge cases (empty input, divide by zero, etc.)
+"""
 
-class _CalculatorScreenState extends State<CalculatorScreen> {
-  String _output = "0";
-  String _input = "";
-  double num1 = 0;
-  double num2 = 0;
-  String operand = "";
 
-  void _buttonPressed(String buttonText) {
-    setState(() {
-      if (buttonText == "C") {
-        _output = "0";
-        _input = "";
-        num1 = 0;
-        num2 = 0;
-        operand = "";
-      }
-      else if (buttonText == "+" || buttonText == "-" || buttonText == "×" || buttonText == "÷") {
-        num1 = double.parse(_output);
-        operand = buttonText;
-        _input = "";
-      }
-      else if (buttonText == "=") {
-        num2 = double.parse(_output);
-        switch (operand) {
-          case "+":
-            _output = (num1 + num2).toString();
-            break;
-          case "-":
-            _output = (num1 - num2).toString();
-            break;
-          case "×":
-            _output = (num1 * num2).toString();
-            break;
-          case "÷":
-            if (num2 != 0) {
-              _output = (num1 / num2).toString();
-            } else {
-              _output = "Error";
-            }
-            break;
-        }
-        _input = _output;
-        num1 = 0;
-        num2 = 0;
-        operand = "";
-      }
-      else {
-        _input = _input + buttonText;
-        _output = _input;
-      }
-      
-      if (_output.contains('.')) {
-        _output = _output.replaceAll(RegExp(r'\.0+$'), '');
-      }
-    });
-  }
+def generate_flutter_code(prompt, previous_code="", history="", attempt=1):
+    print(f"  Generating code (attempt {attempt}/3)...")
 
-  Widget _buildButton(String text, {Color? color}) {
-    return Expanded(
-      child: Padding(
-        padding: const EdgeInsets.all(6.0),
-        child: ElevatedButton(
-          onPressed: () => _buttonPressed(text),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: color ?? const Color(0xFF1E1E2E),
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 20),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          child: Text(
-            text,
-            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-          ),
-        ),
-      ),
-    );
-  }
+    simplify = ""
+    if attempt == 2:
+        simplify = "\nKEEP IT SIMPLE: Avoid complex animations."
+    elif attempt >= 3:
+        simplify = "\nVERY SIMPLE: Single screen, basic layout only."
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Calculator'),
-        centerTitle: true,
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            flex: 2,
-            child: Container(
-              padding: const EdgeInsets.all(20),
-              alignment: Alignment.bottomRight,
-              child: Text(
-                _output,
-                style: const TextStyle(
-                  fontSize: 48,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 3,
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    _buildButton("7"),
-                    _buildButton("8"),
-                    _buildButton("9"),
-                    _buildButton("÷", color: const Color(0xFF6C63FF)),
-                  ],
-                ),
-                Row(
-                  children: [
-                    _buildButton("4"),
-                    _buildButton("5"),
-                    _buildButton("6"),
-                    _buildButton("×", color: const Color(0xFF6C63FF)),
-                  ],
-                ),
-                Row(
-                  children: [
-                    _buildButton("1"),
-                    _buildButton("2"),
-                    _buildButton("3"),
-                    _buildButton("-", color: const Color(0xFF6C63FF)),
-                  ],
-                ),
-                Row(
-                  children: [
-                    _buildButton("0"),
-                    _buildButton("."),
-                    _buildButton("C", color: Colors.red),
-                    _buildButton("+", color: const Color(0xFF6C63FF)),
-                  ],
-                ),
-                Row(
-                  children: [
-                    _buildButton("=", color: const Color(0xFF00D68F)),
-                  ],
-                ),
-              ],
-            ),
-          ),
+    if previous_code and previous_code.strip():
+        history_text = _build_history(history)
+        system = SYSTEM_PROMPT + "\nMODIFICATION MODE: Keep ALL existing features. Only change what user requests."
+        user = f"""{history_text}
+
+MODIFICATION REQUEST: {prompt}
+{simplify}
+
+CURRENT CODE:
+{previous_code}
+
+Return complete updated Dart code only."""
+    else:
+        system = SYSTEM_PROMPT + "\nNEW APP MODE: Create a complete, polished, functional app."
+        user = f"""Create a complete Flutter app: {prompt}
+{simplify}
+
+Make it beautiful with dark theme. Handle all edge cases.
+Return only pure Dart code starting with the import statement."""
+
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user",   "content": user},
         ],
-      ),
-    );
-  }
-}
-'''
+        temperature=0.15 if attempt == 1 else 0.05,
+        max_tokens=6000,
+    )
 
-def generate_simple_app():
-    """Generate a simple working app as fallback"""
-    return '''import 'package:flutter/material.dart';
+    code = response.choices[0].message.content.strip()
+    return _clean_code(code)
 
-void main() {
-  runApp(const MyApp());
-}
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+def _build_history(history):
+    if not history:
+        return ""
+    try:
+        items = json.loads(history)
+        lines = ["\nCONVERSATION HISTORY:"]
+        for i, item in enumerate(items[-8:]):
+            lines.append(f"  Step {i+1} [{item['type'].upper()}]: {item['content'][:200]}")
+        return "\n".join(lines)
+    except Exception:
+        return ""
 
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'AI App',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        useMaterial3: true,
-        colorScheme: const ColorScheme.dark(
-          primary: Color(0xFF6C63FF),
-          background: Color(0xFF0F0F1A),
-        ),
-        scaffoldBackgroundColor: const Color(0xFF0F0F1A),
-      ),
-      home: const HomeScreen(),
-    );
-  }
-}
 
-class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
+def _clean_code(code):
+    if "```dart" in code:
+        code = code.split("```dart")[1].split("```")[0].strip()
+    elif "```" in code:
+        code = code.split("```")[1].split("```")[0].strip()
+    for marker in ["import 'package:flutter/material.dart'", "import 'dart:math'"]:
+        idx = code.find(marker)
+        if idx != -1:
+            return code[idx:]
+    return code
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('AI App Builder'),
-        centerTitle: true,
-      ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                Icons.auto_awesome,
-                size: 80,
-                color: Color(0xFF6C63FF),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'App Ready!',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                'Your app has been generated successfully.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white70, fontSize: 16),
-              ),
-              const SizedBox(height: 30),
-              ElevatedButton(
-                onPressed: () {},
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF6C63FF),
-                  padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Text(
-                  'Get Started',
-                  style: TextStyle(fontSize: 16),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-'''
 
-def generate_pubspec():
-    return '''name: ai_app
-description: AI Generated App
-version: 1.0.0+1
+def apply_known_fixes(code):
+    for wrong, correct in KNOWN_ICON_FIXES.items():
+        code = code.replace(wrong, correct)
+    for pkg in BANNED_PACKAGES:
+        code = re.sub(rf"import 'package:{re.escape(pkg)}[^']*';\n?", '', code)
+    code = re.sub(r'\baccentColor\s*:.*?,?\n?', '', code)
+    code = re.sub(
+        r'primarySwatch\s*:\s*Colors\.\w+,?',
+        'colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF6C63FF)), useMaterial3: true,',
+        code
+    )
+    code = re.sub(
+        r'ColorScheme\.fromSwatch\([^)]*\)',
+        'ColorScheme.fromSeed(seedColor: const Color(0xFF6C63FF))',
+        code
+    )
+    if 'brightness: Brightness.dark' in code:
+        code = re.sub(
+            r'ColorScheme\.fromSeed\(\s*seedColor\s*:\s*((?:const\s+)?(?:Colors\.\w+|Color\([^)]+\)))\s*\)',
+            r'ColorScheme.fromSeed(seedColor: \1, brightness: Brightness.dark)',
+            code
+        )
+    if 'ThemeData(' in code and 'colorScheme' not in code:
+        code = code.replace(
+            'ThemeData(',
+            'ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF6C63FF)), useMaterial3: true, '
+        )
+    math_fns = ['pow', 'sqrt', 'sin', 'cos', 'tan', 'log', 'exp']
+    if any(f'{fn}(' in code for fn in math_fns):
+        if "import 'dart:math'" not in code:
+            code = "import 'dart:math' as math;\n" + code
+        if "as math" in code:
+            for fn in math_fns:
+                code = re.sub(rf'(?<!math\.){re.escape(fn)}\(', f'math.{fn}(', code)
+    lines = code.split('\n')
+    seen = set()
+    result = []
+    for line in lines:
+        if line.strip().startswith('import '):
+            if line.strip() not in seen:
+                seen.add(line.strip())
+                result.append(line)
+        else:
+            result.append(line)
+    return '\n'.join(result)
 
-environment:
-  sdk: '>=3.0.0 <4.0.0'
 
-dependencies:
-  flutter:
-    sdk: flutter
+def ai_fix_errors(code, errors):
+    print(f"  Fixing {len(errors)} error(s)...")
+    math_errors = [e for e in errors if any(
+        kw in e for kw in ["'pow' isn't", "'sqrt' isn't", "'sin' isn't"]
+    )]
+    if math_errors and len(math_errors) == len(errors):
+        if "import 'dart:math'" not in code:
+            code = "import 'dart:math' as math;\n" + code
+        for fn in ['pow', 'sqrt', 'sin', 'cos', 'tan', 'log']:
+            code = re.sub(rf'(?<!math\.){re.escape(fn)}\(', f'math.{fn}(', code)
+        return code
 
-dev_dependencies:
-  flutter_test:
-    sdk: flutter
-  flutter_lints: ^3.0.0
+    error_text = "\n".join(f"  {i+1}. {e}" for i, e in enumerate(errors[:10]))
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[
+            {"role": "system", "content": "Fix Flutter/Dart errors. Return ONLY complete fixed Dart code. No markdown, no backticks."},
+            {"role": "user",   "content": f"Fix these errors:\n{error_text}\n\nCode:\n{code}\n\nReturn fixed code only."}
+        ],
+        temperature=0.05,
+        max_tokens=6000,
+    )
+    fixed = response.choices[0].message.content.strip()
+    return apply_known_fixes(_clean_code(fixed))
 
-flutter:
-  uses-material-design: true
-'''
 
-def create_project(project_name="generated_app"):
+def create_project(code, project_name="generated_app"):
     if os.path.exists(project_name):
         shutil.rmtree(project_name)
-    
     result = subprocess.run(
         ["flutter", "create", "--org", "com.aibuilder",
          "--project-name", project_name, project_name],
@@ -344,89 +218,94 @@ def create_project(project_name="generated_app"):
     )
     if result.returncode != 0:
         raise Exception(f"Flutter create failed: {result.stderr}")
-    
-    return project_name
+    with open(os.path.join(project_name, "lib", "main.dart"), 'w', encoding='utf-8') as f:
+        f.write(code)
+    subprocess.run(["flutter", "pub", "get"], cwd=project_name, capture_output=True, timeout=120)
+
+
+def get_errors(project_name):
+    result = subprocess.run(
+        ["flutter", "analyze", "--no-congratulate"],
+        cwd=project_name, capture_output=True, text=True, timeout=120
+    )
+    output = result.stdout + result.stderr
+    return [line.strip() for line in output.split('\n') if 'error •' in line.lower()]
+
 
 def build_apk(project_name):
     result = subprocess.run(
         ["flutter", "build", "apk", "--release"],
-        cwd=project_name,
-        capture_output=True,
-        text=True,
-        timeout=600
+        cwd=project_name, capture_output=True, text=True, timeout=600
     )
-    return result.returncode == 0, result.stderr
+    if result.returncode == 0:
+        return True, []
+    errors = [
+        line.strip() for line in result.stderr.split('\n')
+        if 'error:' in line.lower() and 'lib/' in line
+    ]
+    return False, errors
+
 
 if __name__ == "__main__":
     print("=" * 55)
-    print("🚀 AI APP BUILDER v4.2 - WORKING VERSION")
+    print("AI APP BUILDER — GROQ POWERED")
     print("=" * 55)
-    print(f"📝 Prompt: {APP_PROMPT[:100]}")
-    
-    app_type = detect_app_type(APP_PROMPT)
-    print(f"🎯 Type: {app_type}")
-    
-    final_code = None
-    
-    for attempt in range(1, 4):
-        print(f"\n{'━'*20} Attempt {attempt}/3 {'━'*20}")
-        
-        try:
-            # Generate code based on app type
-            if app_type == 'calculator':
-                print("  📱 Generating Calculator App...")
-                main_dart = generate_calculator_app()
-            else:
-                print("  📱 Generating Simple App...")
-                main_dart = generate_simple_app()
-            
-            # Create project
-            print("  📁 Creating Flutter project...")
-            project_name = create_project()
-            
-            # Write main.dart
-            lib_path = os.path.join(project_name, "lib", "main.dart")
-            with open(lib_path, 'w', encoding='utf-8') as f:
-                f.write(main_dart)
-            
-            # Write pubspec.yaml
-            pubspec_path = os.path.join(project_name, "pubspec.yaml")
-            with open(pubspec_path, 'w', encoding='utf-8') as f:
-                f.write(generate_pubspec())
-            
-            # Get dependencies
-            print("  📦 Getting dependencies...")
-            subprocess.run(
-                ["flutter", "pub", "get"],
-                cwd=project_name,
-                capture_output=True,
-                timeout=180
-            )
-            
-            # Build APK
-            print("  🔨 Building APK...")
-            success, error = build_apk(project_name)
-            
-            if success:
-                print("\n" + "=" * 55)
-                print("🎉 APK BUILD SUCCESSFUL!")
-                print("=" * 55)
-                print("📱 APK: generated_app/build/app/outputs/flutter-apk/app-release.apk")
-                final_code = main_dart
-                break
-            else:
-                print(f"  ❌ Build failed: {error[-200:]}")
+    print(f"Prompt  : {APP_PROMPT[:100]}")
+    print(f"Session : {SESSION_ID or 'N/A'}")
+    print(f"Mode    : {'Modifying' if PREVIOUS_CODE else 'New app'}")
+
+    MAX_GEN = 3
+    MAX_FIX = 6
+    final_success = False
+    current_code = ""
+
+    for gen in range(1, MAX_GEN + 1):
+        print(f"\n{'='*20} GENERATION {gen}/{MAX_GEN} {'='*20}")
+        current_code = generate_flutter_code(APP_PROMPT, PREVIOUS_CODE, CONVERSATION_HISTORY, gen)
+        current_code = apply_known_fixes(current_code)
+
+        last_errors = []
+        same_count = 0
+
+        for fix in range(MAX_FIX):
+            print(f"  Attempt {fix + 1}/{MAX_FIX}")
+            create_project(current_code)
+            errors = get_errors("generated_app")
+
+            if errors:
+                print(f"  {len(errors)} error(s) found")
+                if errors == last_errors:
+                    same_count += 1
+                    if same_count >= 2:
+                        print("  Same errors — regenerating")
+                        break
+                else:
+                    same_count = 0
+                last_errors = errors
+                current_code = apply_known_fixes(ai_fix_errors(current_code, errors))
                 continue
-                
-        except Exception as e:
-            print(f"  ❌ Error: {e}")
-            continue
-    
-    if not final_code:
-        raise Exception("❌ Could not build APK after all attempts")
-    
-    # Save final code
+
+            print("  No errors — building APK...")
+            success, build_errors = build_apk("generated_app")
+
+            if success:
+                print(f"\n  SUCCESS! Gen {gen}, Fix {fix + 1}")
+                final_success = True
+                break
+            elif build_errors:
+                current_code = apply_known_fixes(ai_fix_errors(current_code, build_errors))
+            else:
+                break
+
+        if final_success:
+            break
+
+    if not final_success:
+        raise Exception("Could not build APK after all attempts")
+
     with open("final_code.dart", "w", encoding='utf-8') as f:
-        f.write(final_code)
-    
-    print("\n✅ Done!")
+        f.write(current_code)
+
+    print("\n" + "=" * 55)
+    print("APK READY!")
+    print("=" * 55)
